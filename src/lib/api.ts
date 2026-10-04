@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   ApiResponse,
   Batch,
+  CaptureImage,
   SneakerPair,
 } from "./types";
 
@@ -508,7 +509,7 @@ export interface PairUploadSlot {
   image_id: string;
   upload: {
     upload_url: string;
-    fields: Record<string, string>;
+    fields: Record<string, string | number>;
   };
 }
 
@@ -551,3 +552,98 @@ export async function completeCaptureImage(
 }
 
 export default api;
+
+/* ============================================================
+   BULK PAIR UPLOAD
+   ============================================================ */
+
+/* Matches BatchBulkCreatedPairSerializer in the backend. */
+export interface BulkCreatedPair {
+  client_ref: string;
+  pair: {
+    id: string;
+    pair_id: string;
+    pair_number: number;
+    batch: string;
+    brand: string;
+    model: string;
+    sku: string;
+    size: string;
+    condition: string;
+    status: string;
+    created_at: string;
+  };
+  capture_session_id: string;
+  upload_slots: PairUploadSlot[];
+}
+
+export interface CreatePairsBulkResponse {
+  pairs: BulkCreatedPair[];
+}
+
+export interface BulkPairUploadSlotPayload {
+  angle: string;
+  file_size: number;
+  content_type: string;
+  original_filename?: string;
+}
+
+export interface BulkPairPayload {
+  client_ref: string;
+  brand?: string;
+  model?: string;
+  sku?: string;
+  size?: string;
+  condition?: string;
+  uploads: BulkPairUploadSlotPayload[];
+}
+
+export interface CompleteBulkResponse {
+  completed: number;
+  failed: Array<{ image_id: string; error: string }>;
+}
+
+/*
+ * Retry returns the flat CaptureImageSerializer, which includes
+ * capture_session but not image_url (unlike the nested CaptureImage).
+ */
+export interface RetryCaptureImageResponse {
+  image: Omit<CaptureImage, "image_url"> & {
+    capture_session: string;
+  };
+  upload: PairUploadSlot["upload"];
+}
+
+export async function createPairsBulk(
+  batchId: string,
+  body: { pairs: BulkPairPayload[] },
+): Promise<CreatePairsBulkResponse> {
+  const response = await api.post<ApiResponse<CreatePairsBulkResponse>>(
+    `/batches/${batchId}/pairs/bulk/`,
+    body,
+  );
+
+  return response.data.data;
+}
+
+export async function completeCaptureImagesBulk(
+  imageIds: string[],
+): Promise<CompleteBulkResponse> {
+  const response = await api.post<ApiResponse<CompleteBulkResponse>>(
+    "/capture-images/complete-bulk/",
+    { image_ids: imageIds },
+  );
+
+  return response.data.data;
+}
+
+export async function retryCaptureImage(
+  imageId: string,
+): Promise<RetryCaptureImageResponse> {
+  const response = await api.post<ApiResponse<RetryCaptureImageResponse>>(
+    `/capture-images/${imageId}/retry/`,
+    {},
+  );
+
+  return response.data.data;
+}
