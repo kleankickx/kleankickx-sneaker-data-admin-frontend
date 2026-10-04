@@ -6,7 +6,8 @@
  * FileSystemEntry objects from a drop.
  *
  * Pair key resolution:
- *   1. Folder path (everything before the last "/") when present.
+ *   1. The folder path, but only when the file's innermost folder looks
+ *      like a single pair (see isPairFolder).
  *   2. Otherwise the filename: KKX-PAIR-n, then pair-n, then the stem
  *      with the angle removed.
  */
@@ -60,6 +61,9 @@ const KKX_PAIR_PATTERN = /KKX-PAIR-\d+/i;
 /* "pair" not preceded by a letter, so "repair-5" is not pair-5. */
 const PAIR_NUMBER_PATTERN = /(?<![a-z])pair[\s_-]*(\d+)/i;
 
+/* A folder holding at most this many files is treated as one pair. */
+const MAX_FILES_PER_PAIR_FOLDER = REQUIRED_ANGLES.length;
+
 /* OS metadata files that show up in folder drops and are never images. */
 const IGNORED_FILENAMES = new Set(["thumbs.db", "desktop.ini"]);
 
@@ -70,6 +74,12 @@ const IGNORED_FILENAMES = new Set(["thumbs.db", "desktop.ini"]);
 function basename(path: string): string {
   const index = path.lastIndexOf("/");
   return index === -1 ? path : path.slice(index + 1);
+}
+
+/* Everything before the last "/", or null for a root-level file. */
+function folderPath(path: string): string | null {
+  const index = path.lastIndexOf("/");
+  return index > 0 ? path.slice(0, index) : null;
 }
 
 function stem(name: string): string {
@@ -133,23 +143,83 @@ export function detectPairKeyFromName(
   return key === "" ? null : key;
 }
 
-/**
- * Pair key for a path: the folder path when there is one, otherwise
- * whatever the filename yields.
- */
-export function detectPairKeyFromPath(
-  relativePath: string,
-  angle: Angle | null,
-): string | null {
-  const index = relativePath.lastIndexOf("/");
-  if (index > 0) return relativePath.slice(0, index);
-
-  return detectPairKeyFromName(relativePath, angle);
-}
-
 /* ============================================================
    CLASSIFICATION
    ============================================================ */
+
+function hasExplicitPairKey(name: string): boolean {
+  const base = stem(basename(name));
+  return KKX_PAIR_PATTERN.test(base) || PAIR_NUMBER_PATTERN.test(base);
+}
+
+/**
+ * Decide whether a folder is one pair's worth of images or just a
+ * wrapper around loose files. `names` are the files directly inside
+ * it. When in doubt this says no, so files fall back to their names.
+ */
+export function isPairFolder(folder: string, names: string[]): boolean {
+  // A folder named like a pair always is one.
+  if (hasExplicitPairKey(basename(folder))) return true;
+
+  // Files naming their own pair ("pair-2-top.jpg") carry the truth;
+  // the folder is a wrapper such as "iPhone Export".
+  if (names.some(hasExplicitPairKey)) return false;
+
+  // At most one pair's worth of files.
+  if (names.length <= MAX_FILES_PER_PAIR_FOLDER) return true;
+
+  // More than one pair's worth: only a pair folder if the names carry
+  // angles ("overview.jpg") but nothing that could key them per file.
+  const parsed = names.map((name) => {
+    const angle = detectAngle(name);
+    return { angle, key: detectPairKeyFromName(name, angle) };
+  });
+
+  return (
+    parsed.some((p) => p.angle !== null) &&
+    parsed.every((p) => p.key === null)
+  );
+}
+
+export interface ClassifiedPath {
+  relativePath: string;
+  pairKey: string | null;
+  angle: Angle | null;
+}
+
+/**
+ * Resolve angle and pair key for every path, in input order. Folder
+ * decisions use the innermost folder of each file; when a folder
+ * counts as a pair, its full path is the key.
+ */
+export function classifyPaths(paths: string[]): ClassifiedPath[] {
+  const folderContents = new Map<string, string[]>();
+  for (const path of paths) {
+    const folder = folderPath(path);
+    if (folder === null) continue;
+
+    const names = folderContents.get(folder);
+    if (names) names.push(basename(path));
+    else folderContents.set(folder, [basename(path)]);
+  }
+
+  const pairFolders = new Set(
+    [...folderContents]
+      .filter(([folder, names]) => isPairFolder(folder, names))
+      .map(([folder]) => folder),
+  );
+
+  return paths.map((relativePath) => {
+    const angle = detectAngle(relativePath);
+    const folder = folderPath(relativePath);
+    const pairKey =
+      folder !== null && pairFolders.has(folder)
+        ? folder
+        : detectPairKeyFromName(relativePath, angle);
+
+    return { relativePath, pairKey, angle };
+  });
+}
 
 export function classifyFiles(
   inputs: Array<{ file: File; relativePath: string }>,
@@ -157,20 +227,21 @@ export function classifyFiles(
   const groups = new Map<string, ParsedFile[]>();
   const unassigned: ParsedFile[] = [];
 
-  for (const { file, relativePath } of inputs) {
-    const angle = detectAngle(relativePath);
-    const pairKey = detectPairKeyFromPath(relativePath, angle);
+  const classified = classifyPaths(inputs.map((i) => i.relativePath));
+
+  inputs.forEach(({ file }, index) => {
+    const { relativePath, pairKey, angle } = classified[index];
     const parsed: ParsedFile = { file, relativePath, pairKey, angle };
 
     if (pairKey === null) {
       unassigned.push(parsed);
-      continue;
+      return;
     }
 
     const group = groups.get(pairKey);
     if (group) group.push(parsed);
     else groups.set(pairKey, [parsed]);
-  }
+  });
 
   const pairs = [...groups.entries()]
     .map(([key, files]) => ({ key, files }))
@@ -242,8 +313,11 @@ export async function parseDroppedItems(
   dataTransfer: DataTransfer,
 ): Promise<ParseResult> {
   /*
-   * Entries must be read synchronously: the DataTransferItemList is
-   * emptied once the drop event handler yields.
+   * Read every entry BEFORE the first await. The browser empties
+   * dataTransfer.items as soon as the drop handler yields, so any item
+   * read after an await (e.g. inside walkEntry) silently comes back
+   * empty and files are lost with no error. Do not merge this loop
+   * into the async walk below.
    */
   const entries: FileSystemEntry[] = [];
   const looseFiles: File[] = [];

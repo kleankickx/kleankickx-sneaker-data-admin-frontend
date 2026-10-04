@@ -9,8 +9,7 @@ import { readFileSync } from "node:fs";
 
 import {
   REQUIRED_ANGLES,
-  detectAngle,
-  detectPairKeyFromPath,
+  classifyPaths,
   type Angle,
 } from "../src/lib/bulk-parser.ts";
 
@@ -35,10 +34,10 @@ let classified = 0;
 let unassigned = 0;
 let withAngle = 0;
 
-for (const path of lines) {
-  const angle = detectAngle(path);
-  const pair = detectPairKeyFromPath(path, angle);
-
+// Classified together: folder decisions depend on sibling files.
+for (const { relativePath: path, angle, pairKey: pair } of classifyPaths(
+  lines,
+)) {
   if (angle) {
     withAngle += 1;
     angleCounts.set(angle, (angleCounts.get(angle) ?? 0) + 1);

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyFiles,
   detectAngle,
+  isPairFolder,
   detectPairKeyFromName,
   parseDroppedItems,
 } from "./bulk-parser";
@@ -102,6 +103,97 @@ describe("classifyFiles", () => {
     ]);
   });
 
+  it("judges the innermost folder when nested", () => {
+    const result = classifyFiles(
+      inputs(
+        "intake-2026-10-04/pair-001/overview.jpg",
+        "intake-2026-10-04/pair-002/overview.jpg",
+      ),
+    );
+
+    expect(result.pairs.map((p) => p.key)).toEqual([
+      "intake-2026-10-04/pair-001",
+      "intake-2026-10-04/pair-002",
+    ]);
+  });
+
+  it("ignores a wrapper folder when files name their own pair", () => {
+    const result = classifyFiles(
+      inputs("iPhone Export/pair-2-top.jpg", "iPhone Export/pair-3-top.jpg"),
+    );
+
+    expect(summarize(result)).toEqual({
+      pairs: [
+        { key: "pair-2", paths: ["iPhone Export/pair-2-top.jpg"] },
+        { key: "pair-3", paths: ["iPhone Export/pair-3-top.jpg"] },
+      ],
+      unassigned: [],
+    });
+  });
+
+  it("treats a folder of six angle-named files as one pair", () => {
+    const result = classifyFiles(
+      inputs(
+        ...["overview", "top", "left", "right", "sole", "label"].map(
+          (angle) => `Bulk Intake/${angle}.jpg`,
+        ),
+      ),
+    );
+
+    expect(result.pairs).toHaveLength(1);
+    expect(result.pairs[0].key).toBe("Bulk Intake");
+    expect(result.pairs[0].files.map((f) => f.angle)).toEqual([
+      "overview",
+      "top",
+      "left",
+      "right",
+      "sole",
+      "label",
+    ]);
+  });
+
+  it("sends 7+ files with no angle or pair info to unassigned", () => {
+    const paths = Array.from(
+      { length: 7 },
+      (_, i) => `Bulk Intake/IMG_${1000 + i}.HEIC`,
+    );
+
+    const result = classifyFiles(inputs(...paths));
+
+    expect(result.pairs).toEqual([]);
+    expect(result.unassigned.map((f) => f.relativePath)).toEqual(paths);
+  });
+
+  it("keeps a folder of 7+ angle-only names together", () => {
+    const result = classifyFiles(
+      inputs(
+        ...["overview", "top", "left", "right", "sole", "label"].map(
+          (angle) => `Shoe A/${angle}.jpg`,
+        ),
+        "Shoe A/IMG_0001.HEIC",
+      ),
+    );
+
+    expect(result.pairs.map((p) => [p.key, p.files.length])).toEqual([
+      ["Shoe A", 7],
+    ]);
+  });
+
+  it("splits a large export of img-N-angle files by filename", () => {
+    const paths = ["img-1", "img-2"].flatMap((key) =>
+      ["overview", "top", "left", "right"].map(
+        (angle) => `Export/${key}-${angle}.jpg`,
+      ),
+    );
+
+    const result = classifyFiles(inputs(...paths));
+
+    expect(result.pairs.map((p) => [p.key, p.files.length])).toEqual([
+      ["img-1", 4],
+      ["img-2", 4],
+    ]);
+  });
+
   it("mixes folder and filename grouping, keeping unknowns", () => {
     const result = classifyFiles(
       inputs("pair-001/overview.jpg", "pair-002-top.jpg", "IMG_9999.HEIC"),
@@ -195,6 +287,7 @@ function dataTransfer(
 
 describe("parseDroppedItems", () => {
   it("walks nested folders and paginated readEntries", async () => {
+    // 150 angle-less files: too many for one pair, so unassigned.
     const many = Array.from({ length: 150 }, (_, i) =>
       fileEntry(`IMG_${i}.HEIC`),
     );
@@ -215,12 +308,15 @@ describe("parseDroppedItems", () => {
     );
 
     expect(result.pairs.map((p) => [p.key, p.files.length])).toEqual([
-      ["intake/bulk", 150],
       ["intake/pair-001", 1],
       ["pair-7", 1],
     ]);
-    expect(result.pairs[1].files[0].relativePath).toBe(
+    expect(result.pairs[0].files[0].relativePath).toBe(
       "intake/pair-001/overview.jpg",
+    );
+    expect(result.unassigned).toHaveLength(150);
+    expect(result.unassigned[149].relativePath).toBe(
+      "intake/bulk/IMG_149.HEIC",
     );
   });
 
@@ -233,5 +329,18 @@ describe("parseDroppedItems", () => {
       pairs: [{ key: "pair-1", paths: ["pair-1-top.jpg"] }],
       unassigned: ["IMG_1.HEIC"],
     });
+  });
+});
+
+describe("isPairFolder", () => {
+  it.each([
+    ["pair-12", ["IMG_1.HEIC"], true],
+    ["KKX-PAIR-00000042", ["a.jpg"], true],
+    ["Sneaker pair 7", ["a.jpg"], true],
+    ["repair7", Array(8).fill("IMG_1.HEIC"), false],
+    ["Export", ["pair-1-top.jpg"], false],
+    ["Export", ["IMG_1.HEIC", "IMG_2.HEIC"], true],
+  ] as const)("%s %j -> %s", (folder, names, expected) => {
+    expect(isPairFolder(folder, [...names])).toBe(expected);
   });
 });
