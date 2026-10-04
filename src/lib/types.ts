@@ -24,13 +24,21 @@ export interface Batch {
 export interface SneakerPair {
   id: string;
   pair_id?: string;
-  batch_id: string;
+  pair_number?: number;
+  batch: string;
+  batch_id?: string;
+
   brand: string | null;
   model: string | null;
   sku: string | null;
   size: string | null;
   condition: string | null;
   status: string;
+
+  materials?: SneakerMaterial[];
+  capture_sessions?: CaptureSession[];
+
+  verified_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -70,26 +78,6 @@ export interface SneakerMaterial {
   updated_at: string;
 }
 
-export interface SneakerPair {
-  id: string;
-  pair_id?: string;
-  pair_number?: number;
-  batch: string;
-  batch_id?: string;
 
-  brand: string | null;
-  model: string | null;
-  sku: string | null;
-  size: string | null;
-  condition: string | null;
-  status: string;
-
-  materials?: SneakerMaterial[];
-  capture_sessions?: CaptureSession[];
-
-  verified_at?: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 

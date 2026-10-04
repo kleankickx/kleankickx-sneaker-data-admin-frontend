@@ -68,24 +68,6 @@ function statusClasses(status: string) {
   }
 }
 
-function imageStatusClasses(status: string) {
-  switch (status.toLowerCase()) {
-    case "uploaded":
-      return "bg-emerald-50 text-emerald-700";
-
-    case "uploading":
-      return "bg-blue-50 text-blue-700";
-
-    case "pending":
-      return "bg-amber-50 text-amber-700";
-
-    case "failed":
-      return "bg-red-50 text-red-700";
-
-    default:
-      return "bg-gray-50 text-gray-600";
-  }
-}
 
 function formatStatus(status: string) {
   if (!status) return "Unknown";

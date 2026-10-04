@@ -227,17 +227,7 @@ export default function AddPairModal({
 
   const allFilled = filledCount === REQUIRED_ANGLES.length;
 
-  const anyUploading = useMemo(
-    () =>
-      REQUIRED_ANGLES.some((a) => {
-        const s = files[a];
-        return (
-          s?.status === "uploading" ||
-          s?.status === "completing"
-        );
-      }),
-    [files],
-  );
+
 
   const doneCount = useMemo(
     () =>
@@ -404,11 +394,6 @@ export default function AddPairModal({
 
     abortRef.current = null;
 
-    /* All or nothing: only close when every angle is done. */
-    const allDone = REQUIRED_ANGLES.every(
-      (a) => files[a]?.status === "done",
-    );
-
     /* `files` here is stale — read fresh state via a functional
        setState instead. */
     setFiles((current) => {
@@ -442,24 +427,7 @@ export default function AddPairModal({
     onClose();
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Retry a single failed angle                                      */
-  /* ---------------------------------------------------------------- */
 
-  async function retryAngle(angle: Angle) {
-    /* Because `createPairInBatch` already succeeded before the
-       upload failed, we can't just re-run the whole thing without
-       creating a duplicate pair. For v1 we simply tell the user to
-       use the "Clean up pairs without images" flow on the batch and
-       re-add. A more complete implementation would call the
-       `/capture-images/{id}/retry/` endpoint with the stored image
-       id. */
-    updateAngle(angle, {
-      status: "error",
-      error:
-        "Re-add this pair from the batch to retry the upload.",
-    });
-  }
 
   if (!open) return null;
 
