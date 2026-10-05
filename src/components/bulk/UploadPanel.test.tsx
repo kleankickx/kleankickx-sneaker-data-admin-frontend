@@ -5,10 +5,12 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as rtlRender,
   screen,
   within,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -54,6 +56,21 @@ function setJob(phase: JobPhase, items: QueueItem[]) {
   act(() => {
     useBulkUpload.setState({ phase, items, batchId: "batch-1" });
   });
+}
+
+/* The panel reads the route, so it always renders inside a router. */
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={["/batches"]}>{ui}</MemoryRouter>);
+}
+
+/* Test-only link that navigates without a full page change. */
+function GoTo({ to }: { to: string }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(to)}>
+      go {to}
+    </button>
+  );
 }
 
 const panel = () =>
@@ -251,7 +268,41 @@ describe("UploadPanel", () => {
     expect(panel()).not.toBeInTheDocument();
   });
 
-  it("shows done for three seconds, then clears", () => {
+  it("collapses on route change while a job is running", () => {
+    setJob("uploading", pairItems("pair-0", "pair-0"));
+    render(
+      <>
+        <UploadPanel />
+        <GoTo to="/sneakers" />
+      </>,
+    );
+    fireEvent.click(header());
+    expect(header()).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "go /sneakers" }));
+
+    expect(header()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("stays expanded on route change after a failure", () => {
+    setJob(
+      "failed",
+      pairItems("pair-0", "pair-0", () => ({ status: "failed" })),
+    );
+    render(
+      <>
+        <UploadPanel />
+        <GoTo to="/sneakers" />
+      </>,
+    );
+    expect(header()).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "go /sneakers" }));
+
+    expect(header()).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("shows done for four seconds, then clears", () => {
     vi.useFakeTimers();
     setJob("done", pairItems("pair-0", "pair-0", () => ({ status: "done" })));
     render(<UploadPanel />);
@@ -259,7 +310,7 @@ describe("UploadPanel", () => {
     expect(screen.getByText("Uploaded 1 pair")).toBeInTheDocument();
 
     act(() => {
-      vi.advanceTimersByTime(2999);
+      vi.advanceTimersByTime(3999);
     });
     expect(panel()).toBeInTheDocument();
 

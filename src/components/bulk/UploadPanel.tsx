@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import {
   cancelBulkUpload,
@@ -12,7 +13,7 @@ import {
 } from "../../lib/bulk-upload-store";
 
 /* How long the "done" state stays visible before the panel clears. */
-const DONE_DISMISS_MS = 3000;
+const DONE_DISMISS_MS = 4000;
 
 type PairStatus = "done" | "failed" | "uploading" | "queued";
 
@@ -30,6 +31,13 @@ const UPLOADED: ReadonlySet<QueueItem["status"]> = new Set([
   "uploaded",
   "completing",
   "done",
+]);
+
+/* Phases that collapse to the pill on navigation; "failed" stays open. */
+const ACTIVE_PHASES: ReadonlySet<JobPhase> = new Set([
+  "preparing",
+  "uploading",
+  "completing",
 ]);
 
 const IN_FLIGHT: ReadonlySet<QueueItem["status"]> = new Set([
@@ -243,15 +251,22 @@ export default function UploadPanel() {
   const items = useBulkUpload((s) => s.items);
   const phase = useBulkUpload((s) => s.phase);
   const reset = useBulkUpload((s) => s.reset);
+  const { pathname } = useLocation();
 
   const [expanded, setExpanded] = useState(phase === "failed");
   const [seenPhase, setSeenPhase] = useState(phase);
+  const [seenPathname, setSeenPathname] = useState(pathname);
 
-  /* React to phase changes during render (no effect needed). */
+  /* React to phase and route changes during render (no effect needed). */
   if (phase !== seenPhase) {
     setSeenPhase(phase);
     if (phase === "failed") setExpanded(true);
     if (phase === "preparing") setExpanded(false);
+  }
+
+  if (pathname !== seenPathname) {
+    setSeenPathname(pathname);
+    if (ACTIVE_PHASES.has(phase)) setExpanded(false);
   }
 
   useEffect(() => {
