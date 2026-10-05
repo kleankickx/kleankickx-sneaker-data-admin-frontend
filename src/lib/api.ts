@@ -647,3 +647,19 @@ export async function retryCaptureImage(
 
   return response.data.data;
 }
+
+/* ============================================================
+   UPLOAD CONFIG
+   ============================================================ */
+
+export interface UploadConfig {
+  max_capture_image_size: number;
+  allowed_content_types: string[];
+  required_angles: string[];
+}
+
+export async function getUploadConfig(): Promise<UploadConfig> {
+  const response = await api.get<ApiResponse<UploadConfig>>("/config/");
+
+  return response.data.data;
+}

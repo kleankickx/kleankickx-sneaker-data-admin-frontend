@@ -256,7 +256,7 @@ export function classifyFiles(
    DROP HANDLING
    ============================================================ */
 
-type DroppedInput = { file: File; relativePath: string };
+export type DroppedInput = { file: File; relativePath: string };
 
 function entryFile(entry: FileSystemFileEntry): Promise<File> {
   return new Promise((resolve, reject) => entry.file(resolve, reject));
@@ -306,12 +306,13 @@ async function walkEntry(
 }
 
 /**
- * Collect every file from a drop, walking dropped folders, and
- * classify them.
+ * Collect every file from a drop, walking dropped folders, without
+ * classifying them (callers can filter first). System files are
+ * skipped. Call it synchronously from the drop handler.
  */
-export async function parseDroppedItems(
+export async function collectDroppedFiles(
   dataTransfer: DataTransfer,
-): Promise<ParseResult> {
+): Promise<DroppedInput[]> {
   /*
    * Read every entry BEFORE the first await. The browser empties
    * dataTransfer.items as soon as the drop handler yields, so any item
@@ -346,7 +347,7 @@ export async function parseDroppedItems(
         inputs.push({ file, relativePath: file.name });
       }
     }
-    return classifyFiles(inputs);
+    return inputs;
   }
 
   for (const entry of entries) {
@@ -359,5 +360,15 @@ export async function parseDroppedItems(
     }
   }
 
-  return classifyFiles(inputs);
+  return inputs;
+}
+
+/**
+ * Collect every file from a drop, walking dropped folders, and
+ * classify them.
+ */
+export async function parseDroppedItems(
+  dataTransfer: DataTransfer,
+): Promise<ParseResult> {
+  return classifyFiles(await collectDroppedFiles(dataTransfer));
 }
