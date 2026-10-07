@@ -1,33 +1,36 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+
+import AiAnalysisCard from "../components/verification/AiAnalysisCard";
+import ImageViewer from "../components/verification/ImageViewer";
+import VerificationPanel from "../components/verification/VerificationPanel";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
-import EditPairModal from "../components/sneakers/EditPairModal";
 import ReplaceImagesModal from "../components/sneakers/ReplaceImagesModal";
-import { getSneaker } from "../lib/api";
+import {
+  getLatestAiJob,
+  getSneaker,
+  getVerificationEligibility,
+} from "../lib/api";
 import type {
-  CaptureImage,
+  AIIdentificationJob,
   SneakerPair,
+  VerificationEligibility,
 } from "../lib/types";
+import {
+  aiAnalysisFrom,
+  angleSlots,
+  verificationBlockers,
+} from "../lib/verification";
 
 interface Toast {
   type: "success" | "error";
   message: string;
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -71,7 +74,6 @@ function statusClasses(status: string) {
   }
 }
 
-
 function formatStatus(status: string) {
   if (!status) return "Unknown";
 
@@ -80,218 +82,272 @@ function formatStatus(status: string) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function formatAngle(angle: string) {
-  if (!angle) return "Unknown";
+/* A message fit for the page; never Axios's own error text. */
+function loadErrorMessage(error: unknown) {
+  const e = error as {
+    response?: { status?: number; data?: { error?: { message?: string } } };
+  };
 
-  return angle
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
+  if (!e?.response) {
+    return "Couldn't reach the server. Check your connection and try again.";
+  }
 
-function getErrorMessage(error: any) {
+  if (e.response.status === 404) {
+    return "This sneaker pair doesn't exist or has been deleted.";
+  }
+
   return (
-    error?.response?.data?.error?.message ||
-    error?.response?.data?.message ||
-    error?.message ||
+    e.response.data?.error?.message ||
     "Something went wrong while loading this sneaker."
   );
 }
 
-function DetailSkeleton() {
+function WorkspaceSkeleton() {
   return (
-    <div className="animate-pulse space-y-6">
-      <div className="h-4 w-48 rounded bg-gray-200" />
+    <div className="animate-pulse" aria-label="Loading sneaker pair">
+      <div className="h-8 w-20 rounded-lg bg-gray-200" />
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-4">
-            <div className="h-4 w-32 rounded bg-gray-200" />
-            <div className="h-9 w-64 rounded bg-gray-200" />
-            <div className="h-4 w-40 rounded bg-gray-200" />
+      <div className="mt-5 space-y-3">
+        <div className="h-8 w-56 rounded bg-gray-200" />
+        <div className="h-4 w-40 rounded bg-gray-200" />
+        <div className="h-6 w-24 rounded-full bg-gray-200" />
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="h-5 w-24 rounded bg-gray-200" />
+          <div className="mt-4 aspect-[4/3] rounded-xl bg-gray-200" />
+          <div className="mt-4 grid grid-cols-3 gap-2.5 sm:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div key={index} className="aspect-square rounded-xl bg-gray-200" />
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="h-4 w-28 rounded bg-gray-200" />
+            <div className="mt-4 h-2 w-full rounded bg-gray-200" />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="h-10 rounded bg-gray-200" />
+              ))}
+            </div>
           </div>
 
-          <div className="h-9 w-28 rounded-xl bg-gray-200" />
+          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+            <div className="h-5 w-32 rounded bg-gray-200" />
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div
+                  key={index}
+                  className={index === 4 ? "sm:col-span-2" : undefined}
+                >
+                  <div className="h-4 w-16 rounded bg-gray-200" />
+                  <div className="mt-2 h-11 rounded-lg bg-gray-200" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="h-6 w-40 rounded bg-gray-200" />
+function ToastMessage({
+  toast,
+  onDismiss,
+}: {
+  toast: Toast;
+  onDismiss: () => void;
+}) {
+  const success = toast.type === "success";
 
-        <div className="mt-5 aspect-[16/10] rounded-xl bg-gray-200" />
-
-        <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-6">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div
-              key={index}
-              className="aspect-square rounded-xl bg-gray-200"
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={index}
-            className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+  return (
+    <div className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm">
+      <div
+        role="status"
+        className={`flex items-start gap-3 rounded-xl border bg-white p-4 shadow-lg ${
+          success ? "border-emerald-200" : "border-red-200"
+        }`}
+      >
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+            success ? "bg-emerald-50" : "bg-red-50"
+          }`}
+        >
+          <span
+            aria-hidden="true"
+            className={`material-symbols-outlined text-[18px] ${
+              success ? "text-emerald-600" : "text-red-600"
+            }`}
           >
-            <div className="h-4 w-24 rounded bg-gray-200" />
-            <div className="mt-3 h-6 w-32 rounded bg-gray-200" />
-          </div>
-        ))}
+            {success ? "check" : "error"}
+          </span>
+        </div>
+
+        <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
+          {toast.message}
+        </p>
+
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-gray-400 transition hover:text-gray-600"
+          aria-label="Dismiss notification"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
+        </button>
       </div>
     </div>
   );
 }
 
-function EmptyImages() {
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex aspect-[16/10] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-        <span className="material-symbols-outlined text-[28px] text-gray-400">
-          photo_camera
-        </span>
-      </div>
-
-      <h3 className="mt-4 text-sm font-semibold text-gray-900">
-        No uploaded images
-      </h3>
-
-      <p className="mt-1 max-w-sm text-center text-sm text-gray-500">
-        No completed capture images are available for this sneaker pair yet.
-      </p>
+    <div className="flex items-start justify-between gap-4 py-2.5">
+      <dt className="shrink-0 text-sm text-gray-500">{label}</dt>
+      <dd className="min-w-0 text-right text-sm font-medium text-gray-900">
+        {children}
+      </dd>
     </div>
   );
 }
 
-export default function SneakerDetailsPage() {
-  const { sneakerId } = useParams<{ sneakerId: string }>();
+/**
+ * The verification workspace for one sneaker pair: its photos on the
+ * left; AI suggestions, the verified values and record details on the
+ * right.
+ */
+function Workspace({ sneakerId }: { sneakerId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [sneaker, setSneaker] = useState<SneakerPair | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [selectedImageId, setSelectedImageId] = useState<string | null>(
-    null,
-  );
-  const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [replacingImages, setReplacingImages] = useState(false);
 
-  const loadSneaker = useCallback(
-    async (isRefresh = false) => {
-      if (!sneakerId) {
-        setError("Sneaker ID is missing.");
-        setLoading(false);
-        return;
-      }
+  const [aiJob, setAiJob] = useState<AIIdentificationJob | null>(null);
+  const [aiLoading, setAiLoading] = useState(true);
+  const [aiError, setAiError] = useState(false);
 
-      try {
-        if (isRefresh) {
-          setRefreshing(true);
-        } else {
-          setLoading(true);
-        }
+  const [eligibility, setEligibility] =
+    useState<VerificationEligibility | null>(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(true);
 
-        setError(null);
-
-        const data = await getSneaker(sneakerId);
-
-        setSneaker(data);
-
-        if (isRefresh) {
-          setToast({
-            type: "success",
-            message: "Sneaker details refreshed.",
-          });
-        }
-      } catch (err) {
-        setError(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
+  // The fetchers only set state once their request settles; callers
+  // flip the loading flags first (see refresh/retry below).
+  const fetchAiJob = useCallback(
+    () =>
+      getLatestAiJob(sneakerId)
+        .then(
+          (job) => {
+            setAiJob(job);
+            setAiError(false);
+          },
+          () => setAiError(true),
+        )
+        .finally(() => setAiLoading(false)),
     [sneakerId],
   );
 
+  const fetchEligibility = useCallback(
+    () =>
+      getVerificationEligibility(sneakerId)
+        // On failure the panel falls back to the status rule the
+        // backend enforces.
+        .then(setEligibility, () => setEligibility(null))
+        .finally(() => setEligibilityLoading(false)),
+    [sneakerId],
+  );
+
+  const fetchSneaker = useCallback(
+    (isRefresh: boolean) =>
+      getSneaker(sneakerId)
+        .then(
+          (pair) => {
+            setSneaker(pair);
+            setError(null);
+            if (isRefresh) {
+              setToast({ type: "success", message: "Pair refreshed." });
+            }
+          },
+          (err) => {
+            if (isRefresh) {
+              setToast({ type: "error", message: loadErrorMessage(err) });
+            } else {
+              setError(loadErrorMessage(err));
+            }
+          },
+        )
+        .finally(() => {
+          setLoading(false);
+          setRefreshing(false);
+        }),
+    [sneakerId],
+  );
+
+  // AI results and eligibility load on their own; a failure in either
+  // never blocks the pair itself.
   useEffect(() => {
-    loadSneaker();
-  }, [loadSneaker]);
+    fetchSneaker(false);
+    fetchAiJob();
+    fetchEligibility();
+  }, [fetchSneaker, fetchAiJob, fetchEligibility]);
+
+  function reloadAiJob() {
+    setAiLoading(true);
+    fetchAiJob();
+  }
+
+  function reloadEligibility() {
+    setEligibilityLoading(true);
+    fetchEligibility();
+  }
+
+  function reload(isRefresh: boolean) {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+    fetchSneaker(isRefresh);
+    reloadAiJob();
+    reloadEligibility();
+  }
 
   useEffect(() => {
     if (!toast) return;
 
-    const timeout = window.setTimeout(() => {
-      setToast(null);
-    }, 3500);
+    const timeout = window.setTimeout(() => setToast(null), 3500);
 
-    return () => {
-      window.clearTimeout(timeout);
-    };
+    return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  const uploadedImages = useMemo(() => {
-    const sessions = sneaker?.capture_sessions ?? [];
+  const slots = useMemo(
+    () => (sneaker ? angleSlots(sneaker) : []),
+    [sneaker],
+  );
 
-    const images: CaptureImage[] = [];
+  const analysis = aiAnalysisFrom(aiJob, {
+    loading: aiLoading,
+    error: aiError,
+  });
 
-    for (const session of sessions) {
-      for (const image of session.images ?? []) {
-        if (
-          image.status.toLowerCase() === "uploaded" &&
-          image.image_url
-        ) {
-          images.push(image);
-        }
-      }
-    }
-
-    return images;
-  }, [sneaker]);
-
-  useEffect(() => {
-    if (uploadedImages.length === 0) {
-      setSelectedImageId(null);
-      return;
-    }
-
-    const currentStillExists = uploadedImages.some(
-      (image) => image.id === selectedImageId,
-    );
-
-    if (currentStillExists) {
-      return;
-    }
-
-    const overviewImage = uploadedImages.find(
-      (image) => image.angle.toLowerCase() === "overview",
-    );
-
-    setSelectedImageId(
-      overviewImage?.id ?? uploadedImages[0].id,
-    );
-  }, [uploadedImages, selectedImageId]);
-
-  const selectedImage = useMemo(() => {
-    if (!uploadedImages.length) {
-      return null;
-    }
-
-    return (
-      uploadedImages.find(
-        (image) => image.id === selectedImageId,
-      ) ?? uploadedImages[0]
-    );
-  }, [uploadedImages, selectedImageId]);
+  // Opened from a direct link there's no page to go back to.
+  const goBack = () =>
+    location.key === "default" ? navigate("/sneakers") : navigate(-1);
 
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50">
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <DetailSkeleton />
+          <WorkspaceSkeleton />
         </main>
       </div>
     );
@@ -301,22 +357,9 @@ export default function SneakerDetailsPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <div className="mb-6 flex items-center gap-2 text-sm">
-            <Link
-              to="/sneakers"
-              className="text-gray-500 transition hover:text-gray-900"
-            >
-              Sneakers
-            </Link>
-
-            <span className="text-gray-300">/</span>
-
-            <span className="text-gray-900">Details</span>
-          </div>
-
           <div className="rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
-              <span className="material-symbols-outlined text-red-600">
+              <span aria-hidden="true" className="material-symbols-outlined text-red-600">
                 error
               </span>
             </div>
@@ -332,10 +375,10 @@ export default function SneakerDetailsPage() {
             <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
               <button
                 type="button"
-                onClick={() => loadSneaker()}
+                onClick={() => reload(false)}
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
               >
-                <span className="material-symbols-outlined text-[18px]">
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
                   refresh
                 </span>
                 Try again
@@ -343,9 +386,12 @@ export default function SneakerDetailsPage() {
 
               <button
                 type="button"
-                onClick={() => navigate(-1)}
+                onClick={goBack}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
               >
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                  arrow_back
+                </span>
                 Go back
               </button>
             </div>
@@ -356,178 +402,81 @@ export default function SneakerDetailsPage() {
   }
 
   const displayPairId = getPairId(sneaker);
-
-  const totalCaptureSessions =
-    sneaker.capture_sessions?.length ?? 0;
-
-  const readyCaptureSessions =
-    sneaker.capture_sessions?.filter(
-      (session) => session.is_ready,
-    ).length ?? 0;
+  const isVerified = sneaker.status.toLowerCase() === "verified";
+  const summary = [sneaker.brand, sneaker.model].filter(Boolean).join(" ");
+  const readySessions =
+    sneaker.capture_sessions?.filter((session) => session.is_ready).length ??
+    0;
+  const totalSessions = sneaker.capture_sessions?.length ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
       {toast && (
-        <div className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm">
-          <div
-            className={`flex items-start gap-3 rounded-xl border bg-white p-4 shadow-lg ${
-              toast.type === "success"
-                ? "border-emerald-200"
-                : "border-red-200"
-            }`}
-          >
-            <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                toast.type === "success"
-                  ? "bg-emerald-50"
-                  : "bg-red-50"
-              }`}
-            >
-              <span
-                className={`material-symbols-outlined text-[18px] ${
-                  toast.type === "success"
-                    ? "text-emerald-600"
-                    : "text-red-600"
-                }`}
-              >
-                {toast.type === "success"
-                  ? "check"
-                  : "error"}
-              </span>
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-gray-900">
-                {toast.message}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="text-gray-400 transition hover:text-gray-600"
-              aria-label="Dismiss notification"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                close
-              </span>
-            </button>
-          </div>
-        </div>
+        <ToastMessage toast={toast} onDismiss={() => setToast(null)} />
       )}
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Breadcrumb */}
-        <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
-          <Link
-            to="/sneakers"
-            className="text-gray-500 transition hover:text-gray-900"
-          >
-            Sneakers
-          </Link>
-
-          <span className="text-gray-300">/</span>
-
-          <span className="font-medium text-gray-900">
-            {displayPairId}
-          </span>
-        </div>
-
         {/* Header */}
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
-                  Sneaker Pair
-                </span>
+        <button
+          type="button"
+          onClick={goBack}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 -ml-2 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+        >
+          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back
+        </button>
 
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusClasses(
-                    sneaker.status,
-                  )}`}
-                >
-                  {formatStatus(sneaker.status)}
-                </span>
-              </div>
+        <header className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="break-all font-mono text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">
+              {displayPairId}
+            </h1>
 
-              <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight text-gray-900 sm:text-3xl">
-                {displayPairId}
-              </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              {summary || "Brand and model not recorded"}
+            </p>
 
-              <p className="mt-2 text-sm text-gray-500">
-                {sneaker.brand || "Unknown brand"}
-                {sneaker.model
-                  ? ` · ${sneaker.model}`
-                  : ""}
-              </p>
-            </div>
-
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  edit
-                </span>
-                Edit
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDeleting(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  delete
-                </span>
-                Delete
-              </button>
-
-              <button
-                type="button"
-                onClick={() => loadSneaker(true)}
-                disabled={refreshing}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span
-                  className={`material-symbols-outlined text-[18px] ${
-                    refreshing ? "animate-spin" : ""
-                  }`}
-                >
-                  refresh
-                </span>
-
-                {refreshing
-                  ? "Refreshing..."
-                  : "Refresh"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  arrow_back
-                </span>
-                Back
-              </button>
-            </div>
+            <span
+              className={`mt-3 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusClasses(
+                sneaker.status,
+              )}`}
+            >
+              {formatStatus(sneaker.status)}
+            </span>
           </div>
-        </section>
 
-        <EditPairModal
-          pair={editing ? sneaker : null}
-          onClose={() => setEditing(false)}
-          onSaved={(updated) => {
-            setSneaker(updated);
-            setEditing(false);
-            setToast({ type: "success", message: "Pair updated." });
-          }}
-        />
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => reload(true)}
+              disabled={refreshing}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <span
+                aria-hidden="true"
+                className={`material-symbols-outlined text-[18px] ${
+                  refreshing ? "animate-spin" : ""
+                }`}
+              >
+                refresh
+              </span>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDeleting(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+            >
+              <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                delete
+              </span>
+              Delete
+            </button>
+          </div>
+        </header>
 
         <DeletePairDialog
           pair={deleting ? sneaker : null}
@@ -541,8 +490,10 @@ export default function SneakerDetailsPage() {
           pair={replacingImages ? sneaker : null}
           onClose={() => setReplacingImages(false)}
           onReplaced={(count, finished) => {
-            // Refresh in place (no skeleton) so the gallery shows the swap.
+            // Refresh in place (no skeleton) so the viewer shows the swap;
+            // a complete set of photos can change eligibility.
             getSneaker(sneaker.id).then(setSneaker, () => {});
+            reloadEligibility();
             if (finished) setReplacingImages(false);
             setToast({
               type: "success",
@@ -551,512 +502,99 @@ export default function SneakerDetailsPage() {
           }}
         />
 
-        {/* Image gallery */}
-        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div>
+        {/* Workspace */}
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+          <div className="lg:sticky lg:top-6 lg:self-start">
+            <ImageViewer
+              key={sneaker.id}
+              slots={slots}
+              pairLabel={displayPairId}
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setReplacingImages(true)}
+                  disabled={isVerified}
+                  title={
+                    isVerified
+                      ? "Verified pairs can't have their photos changed"
+                      : undefined
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[16px]">
+                    {isVerified ? "lock" : "photo_library"}
+                  </span>
+                  {isVerified ? "Photos locked" : "Replace photos"}
+                </button>
+              }
+            />
+          </div>
+
+          <div className="min-w-0 space-y-6">
+            <AiAnalysisCard
+              analysis={analysis}
+              onRetry={reloadAiJob}
+            />
+
+            <VerificationPanel
+              key={`${sneaker.id}:${sneaker.updated_at}`}
+              pair={sneaker}
+              suggestion={
+                analysis.kind === "ready" ? analysis.identification : null
+              }
+              blockers={verificationBlockers(sneaker, eligibility)}
+              checkingEligibility={eligibilityLoading}
+              onSaved={(updated) => {
+                setSneaker(updated);
+                setToast({ type: "success", message: "Changes saved." });
+              }}
+              onVerified={(updated) => {
+                setSneaker(updated);
+                setToast({ type: "success", message: "Pair verified." });
+              }}
+            />
+
+            <section className="rounded-2xl border border-gray-200 bg-white px-5 py-4 shadow-sm sm:px-6">
               <h2 className="text-base font-semibold text-gray-900">
-                Capture images
+                Record
               </h2>
 
-              <p className="mt-1 text-sm text-gray-500">
-                Images captured during the sneaker intake process.
-              </p>
-            </div>
-
-            <div className="mt-2 flex items-center gap-2 sm:mt-0">
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
-                {uploadedImages.length}{" "}
-                {uploadedImages.length === 1
-                  ? "image"
-                  : "images"}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setReplacingImages(true)}
-                disabled={sneaker.status.toLowerCase() === "verified"}
-                title={
-                  sneaker.status.toLowerCase() === "verified"
-                    ? "Verified pairs can't have their photos changed"
-                    : undefined
-                }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  photo_library
-                </span>
-                Replace photos
-              </button>
-            </div>
-          </div>
-
-          {sneaker.status.toLowerCase() === "verified" && (
-            <p className="mt-2 text-xs text-gray-500">
-              Photos are locked because this pair has been verified.
-            </p>
-          )}
-
-          <div className="mt-5">
-            {!selectedImage ? (
-              <EmptyImages />
-            ) : (
-              <>
-                {/* Main image */}
-                <div className="group relative overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
-                  <div className="flex aspect-[16/10] items-center justify-center">
-                    <img
-                      src={selectedImage.image_url ?? ""}
-                      alt={`${formatAngle(
-                        selectedImage.angle,
-                      )} view of ${displayPairId}`}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
-
-                  <div className="absolute bottom-4 left-4">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-black/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
-                      <span className="material-symbols-outlined text-[15px]">
-                        photo_camera
-                      </span>
-                      {formatAngle(selectedImage.angle)}
+              <dl className="mt-2 divide-y divide-gray-100">
+                <DetailRow label="Pair number">
+                  {sneaker.pair_number ?? "—"}
+                </DetailRow>
+                <DetailRow label="Batch">
+                  <Link
+                    to={`/batches/${sneaker.batch}`}
+                    className="inline-flex max-w-full items-center gap-1 text-gray-900 hover:text-gray-600"
+                  >
+                    <span className="truncate">View batch</span>
+                    <span aria-hidden="true" className="material-symbols-outlined shrink-0 text-[16px]">
+                      arrow_forward
                     </span>
-                  </div>
-                </div>
-
-                {/* Thumbnails */}
-                <div className="mt-4">
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
-                    {uploadedImages.map((image) => {
-                      const isSelected =
-                        image.id === selectedImage.id;
-
-                      return (
-                        <button
-                          key={image.id}
-                          type="button"
-                          onClick={() =>
-                            setSelectedImageId(image.id)
-                          }
-                          className={`group relative overflow-hidden rounded-xl border-2 bg-gray-50 transition ${
-                            isSelected
-                              ? "border-gray-900"
-                              : "border-transparent hover:border-gray-300"
-                          }`}
-                        >
-                          <div className="aspect-square">
-                            <img
-                              src={image.image_url ?? ""}
-                              alt={`${formatAngle(
-                                image.angle,
-                              )} view`}
-                              className="h-full w-full object-cover transition duration-200 group-hover:scale-105"
-                            />
-                          </div>
-
-                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-2 pt-5">
-                            <p className="truncate text-left text-[11px] font-medium text-white">
-                              {formatAngle(image.angle)}
-                            </p>
-                          </div>
-
-                          {isSelected && (
-                            <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-gray-900 text-white">
-                              <span className="material-symbols-outlined text-[14px]">
-                                check
-                              </span>
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </section>
-
-        {/* Overview cards */}
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-500">
-                Brand
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-500">
-                  sell
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-3 truncate text-lg font-semibold text-gray-900">
-              {sneaker.brand || "Unknown"}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-500">
-                Model
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-500">
-                  category
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-3 truncate text-lg font-semibold text-gray-900">
-              {sneaker.model || "Unknown"}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-500">
-                Size
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-500">
-                  straighten
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-3 text-lg font-semibold text-gray-900">
-              {sneaker.size || "Unknown"}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-gray-500">
-                Condition
-              </p>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-500">
-                  verified
-                </span>
-              </div>
-            </div>
-
-            <p className="mt-3 text-lg font-semibold text-gray-900">
-              {sneaker.condition
-                ? sneaker.condition.toUpperCase()
-                : "Unknown"}
-            </p>
-          </div>
-        </section>
-
-        {/* Capture overview */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-600">
-                  photo_library
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Capture overview
-                </h2>
-
-                <p className="mt-0.5 text-sm text-gray-500">
-                  Evidence collected for this sneaker pair.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-6 p-6 sm:grid-cols-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Capture sessions
-              </p>
-
-              <p className="mt-1.5 text-lg font-semibold text-gray-900">
-                {totalCaptureSessions}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Ready sessions
-              </p>
-
-              <p className="mt-1.5 text-lg font-semibold text-gray-900">
-                {readyCaptureSessions}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Uploaded images
-              </p>
-
-              <p className="mt-1.5 text-lg font-semibold text-gray-900">
-                {uploadedImages.length}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* Sneaker information */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-600">
-                  footprint
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Sneaker information
-                </h2>
-
-                <p className="mt-0.5 text-sm text-gray-500">
-                  Identification and capture details for this pair.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-x-8 gap-y-7 p-6 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Pair ID
-              </p>
-
-              <p className="mt-1.5 break-all text-sm font-medium text-gray-900">
-                {displayPairId}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Pair number
-              </p>
-
-              <p className="mt-1.5 text-sm font-medium text-gray-900">
-                {sneaker.pair_number ?? "—"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Database ID
-              </p>
-
-              <p className="mt-1.5 break-all text-sm text-gray-600">
-                {sneaker.id}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Batch ID
-              </p>
-
-              <Link
-                to={`/batches/${sneaker.batch}`}
-                className="mt-1.5 inline-flex max-w-full items-center gap-1.5 break-all text-sm font-medium text-gray-900 transition hover:text-gray-600"
-              >
-                <span className="truncate">
-                  {sneaker.batch}
-                </span>
-
-                <span className="material-symbols-outlined shrink-0 text-[16px]">
-                  open_in_new
-                </span>
-              </Link>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Brand
-              </p>
-
-              <p className="mt-1.5 text-sm font-medium text-gray-900">
-                {sneaker.brand || "Not identified"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Model
-              </p>
-
-              <p className="mt-1.5 text-sm font-medium text-gray-900">
-                {sneaker.model || "Not identified"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                SKU
-              </p>
-
-              <p className="mt-1.5 break-all text-sm font-medium text-gray-900">
-                {sneaker.sku || "Not identified"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Size
-              </p>
-
-              <p className="mt-1.5 text-sm font-medium text-gray-900">
-                {sneaker.size || "Not recorded"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Condition
-              </p>
-
-              <p className="mt-1.5 text-sm font-medium text-gray-900">
-                {sneaker.condition
-                  ? sneaker.condition.toUpperCase()
-                  : "Not assessed"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                Status
-              </p>
-
-              <div className="mt-1.5">
-                <span
-                  className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${statusClasses(
-                    sneaker.status,
-                  )}`}
-                >
-                  {formatStatus(sneaker.status)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Record activity */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-600">
-                  schedule
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Record activity
-                </h2>
-
-                <p className="mt-0.5 text-sm text-gray-500">
-                  When this sneaker record was created and last updated.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-6 p-6 sm:grid-cols-2">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[19px] text-gray-500">
-                  add_circle
-                </span>
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Created
-                </p>
-
-                <p className="mt-1 text-sm font-medium text-gray-900">
+                  </Link>
+                </DetailRow>
+                <DetailRow label="Capture sessions">
+                  {readySessions} of {totalSessions} complete
+                </DetailRow>
+                <DetailRow label="Created">
                   {formatDateTime(sneaker.created_at)}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {formatDate(sneaker.created_at)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[19px] text-gray-500">
-                  update
-                </span>
-              </div>
-
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  Last updated
-                </p>
-
-                <p className="mt-1 text-sm font-medium text-gray-900">
+                </DetailRow>
+                <DetailRow label="Last updated">
                   {formatDateTime(sneaker.updated_at)}
-                </p>
-
-                <p className="mt-1 text-xs text-gray-500">
-                  {formatDate(sneaker.updated_at)}
-                </p>
-              </div>
-            </div>
+                </DetailRow>
+              </dl>
+            </section>
           </div>
-        </section>
-
-        {/* Batch relationship */}
-        <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-50">
-                <span className="material-symbols-outlined text-[20px] text-gray-600">
-                  inventory_2
-                </span>
-              </div>
-
-              <div>
-                <h2 className="text-base font-semibold text-gray-900">
-                  Batch
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  This sneaker pair belongs to batch{" "}
-                  <span className="font-medium text-gray-700">
-                    {sneaker.batch}
-                  </span>
-                  .
-                </p>
-              </div>
-            </div>
-
-            <Link
-              to={`/batches/${sneaker.batch}`}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              View batch
-              <span className="material-symbols-outlined text-[17px]">
-                arrow_forward
-              </span>
-            </Link>
-          </div>
-        </section>
+        </div>
       </main>
     </div>
   );
+}
+
+/* Keyed by id, so moving to another pair starts from a clean slate. */
+export default function SneakerDetailsPage() {
+  const { sneakerId = "" } = useParams<{ sneakerId: string }>();
+
+  return <Workspace key={sneakerId} sneakerId={sneakerId} />;
 }

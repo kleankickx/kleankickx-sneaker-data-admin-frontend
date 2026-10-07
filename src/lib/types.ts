@@ -81,3 +81,44 @@ export interface SneakerMaterial {
 
 
 
+/* Matches SneakerIdentificationResultSerializer. */
+export interface SneakerIdentification {
+  id: string;
+  sneaker_pair: string;
+  brand: string;
+  model: string;
+  sku: string;
+  size: string;
+  /* "ai" for AI results, "manual" for operator identifications. */
+  source: string;
+  /* Decimal 0–1 as a string, e.g. "0.9400". */
+  confidence: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/* Matches AIIdentificationJobSerializer. */
+export interface AIIdentificationJob {
+  id: string;
+  sneaker_pair_id: string;
+  celery_task_id: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  identification: SneakerIdentification | null;
+  error_message: string;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/* Matches SneakerPairViewSet.verification_eligibility. */
+export interface VerificationEligibility {
+  sneaker_pair_id: string;
+  eligible: boolean;
+  checks: {
+    status_ready: boolean;
+    has_identification: boolean;
+    has_ready_capture: boolean;
+  };
+  reasons: string[];
+}

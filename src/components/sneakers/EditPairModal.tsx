@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { updateSneaker, type SneakerPairEdit } from "../../lib/api";
+import { readApiError, type ApiFormError } from "../../lib/api-errors";
 import { METADATA_MAX_LENGTH } from "../../lib/bulk-review";
 import { CONDITION_OPTIONS, DEFAULT_CONDITION } from "../../lib/conditions";
 import type { SneakerPair } from "../../lib/types";
@@ -14,43 +15,7 @@ const TEXT_FIELDS: Array<{ field: Exclude<Field, "condition">; label: string }> 
   { field: "size", label: "Size" },
 ];
 
-interface ApiError {
-  message: string;
-  fields: Partial<Record<Field, string>>;
-}
-
-function readApiError(error: unknown): ApiError {
-  const e = error as {
-    response?: {
-      data?: {
-        error?: { message?: string; fields?: Record<string, unknown> };
-      };
-    };
-    message?: string;
-  };
-  const body = e?.response?.data?.error;
-
-  const fields: ApiError["fields"] = {};
-  for (const [field, value] of Object.entries(body?.fields ?? {})) {
-    fields[field as Field] = Array.isArray(value)
-      ? String(value[0])
-      : String(value);
-  }
-
-  // A non-field error (e.g. "These fields can't be edited") reads best
-  // as the main message.
-  const nonField = fields["non_field_errors" as Field];
-  delete fields["non_field_errors" as Field];
-
-  return {
-    message:
-      nonField ||
-      body?.message ||
-      e?.message ||
-      "Could not save changes.",
-    fields,
-  };
-}
+type ApiError = ApiFormError<Field>;
 
 function initialValues(pair: SneakerPair): Required<SneakerPairEdit> {
   return {
@@ -94,7 +59,7 @@ function EditPairForm({
     try {
       onSaved(await updateSneaker(pair.id, changes));
     } catch (err) {
-      setError(readApiError(err));
+      setError(readApiError<Field>(err));
       setSaving(false);
     }
   }
