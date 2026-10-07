@@ -12,6 +12,12 @@ import type { UploadConfig } from "./api";
 
 export type ContentTypeMap = Readonly<Record<string, string>>;
 
+/*
+ * Exists only because GET /config/ might be slow or fail; without a map
+ * the modal can neither filter intake nor set content_type. Delete it
+ * (and make the modal wait for config) once /config/ is known to load
+ * reliably.
+ */
 export const FALLBACK_CONTENT_TYPES: ContentTypeMap = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",

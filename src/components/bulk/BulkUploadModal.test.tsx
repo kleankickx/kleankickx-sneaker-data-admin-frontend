@@ -256,6 +256,33 @@ describe("BulkUploadModal", () => {
     expect(console.warn).toHaveBeenCalledTimes(1);
   });
 
+  it("warns once per session when server angles differ", async () => {
+    vi.resetModules();
+    const { default: FreshModal } = await import("./BulkUploadModal");
+    vi.mocked(getUploadConfig).mockResolvedValue({
+      max_capture_image_size: 10_485_760,
+      allowed_content_types: ["image/jpeg"],
+      required_angles: [...REQUIRED_ANGLES, "heel"],
+      extension_to_content_type: { jpg: "image/jpeg" },
+    });
+
+    const first = render(
+      <FreshModal open batchId="batch-1" onClose={() => {}} />,
+    );
+    await waitFor(() => expect(console.warn).toHaveBeenCalledTimes(1));
+    chooseFiles(pairFiles("pair-1"));
+    first.unmount();
+
+    render(<FreshModal open batchId="batch-1" onClose={() => {}} />);
+    await waitFor(() => expect(getUploadConfig).toHaveBeenCalledTimes(2));
+    await Promise.resolve();
+
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("required_angles"),
+    );
+  });
+
   it("uses the config's type map once it loads", async () => {
     vi.mocked(getUploadConfig).mockResolvedValue({
       max_capture_image_size: 10_485_760,
