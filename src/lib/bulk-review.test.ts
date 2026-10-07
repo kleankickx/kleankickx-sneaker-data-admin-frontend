@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { REQUIRED_ANGLES, classifyFiles, type Angle } from "./bulk-parser";
 import {
+  FALLBACK_RULES,
   addEmptyPair,
   assignFile,
   buildReviewState,
   buildRunInput,
+  imageRulesFromConfig,
   pairIssues,
   removePair,
   startBlocker,
@@ -13,7 +15,13 @@ import {
   type ReviewPair,
   type ReviewState,
 } from "./bulk-review";
-import { contentTypeForName, formatFileSize } from "./image-types";
+import {
+  contentTypeForName,
+  contentTypesFromConfig,
+  formatFileSize,
+} from "./image-types";
+
+const withMax = (maxFileSize: number) => ({ ...FALLBACK_RULES, maxFileSize });
 
 function idGen() {
   let n = 0;
@@ -53,6 +61,28 @@ describe("image types", () => {
     ["no-extension", null],
   ])("%s -> %s", (name, expected) => {
     expect(contentTypeForName(name)).toBe(expected);
+  });
+
+  it("uses the config map, limited to allowed types", () => {
+    const types = contentTypesFromConfig({
+      extension_to_content_type: { JPG: "image/jpeg", gif: "image/gif" },
+      allowed_content_types: ["image/jpeg"],
+    });
+
+    expect(types).toEqual({ jpg: "image/jpeg" });
+    expect(contentTypeForName("a.jpg", types)).toBe("image/jpeg");
+    expect(contentTypeForName("a.gif", types)).toBeNull();
+    expect(contentTypeForName("a.png", types)).toBeNull();
+  });
+
+  it("falls back to the local map without usable config", () => {
+    expect(contentTypesFromConfig(null)).toEqual(
+      contentTypesFromConfig({
+        extension_to_content_type: {},
+        allowed_content_types: [],
+      }),
+    );
+    expect(imageRulesFromConfig(null)).toEqual(FALLBACK_RULES);
   });
 
   it("formats sizes 1024-based", () => {
@@ -171,7 +201,9 @@ describe("validation", () => {
   }
 
   it("lists missing angles", () => {
-    expect(pairIssues(pairWith(["overview", "top", "left", "right"]), null)).toEqual([
+    expect(
+      pairIssues(pairWith(["overview", "top", "left", "right"]), FALLBACK_RULES),
+    ).toEqual([
       "Missing angles: sole, label",
     ]);
   });
@@ -179,28 +211,30 @@ describe("validation", () => {
   it("checks size only when the limit is known", () => {
     const pair = pairWith([...REQUIRED_ANGLES], 200);
 
-    expect(pairIssues(pair, null)).toEqual([]);
-    expect(pairIssues(pair, 100)).toContain("overview is 200 B — max is 100 B");
-    expect(pairIssues(pair, 100)).toHaveLength(6);
+    expect(pairIssues(pair, FALLBACK_RULES)).toEqual([]);
+    expect(pairIssues(pair, withMax(100))).toContain(
+      "overview is 200 B — max is 100 B",
+    );
+    expect(pairIssues(pair, withMax(100))).toHaveLength(6);
   });
 
   it("startBlocker explains the first problem", () => {
     const ok = buildReviewState(parse(...fullPair("pair-1")), idGen());
 
-    expect(startBlocker({ pairs: [], unassigned: [] }, null)).toBe(
+    expect(startBlocker({ pairs: [], unassigned: [] }, FALLBACK_RULES)).toBe(
       "Add at least one pair.",
     );
-    expect(startBlocker(ok, null)).toBeNull();
+    expect(startBlocker(ok, FALLBACK_RULES)).toBeNull();
     expect(
       startBlocker(
         buildReviewState(parse(...fullPair("pair-1").slice(1)), idGen()),
-        null,
+        FALLBACK_RULES,
       ),
     ).toBe("1 pair needs attention.");
     expect(
       startBlocker(
         buildReviewState(parse(...fullPair("pair-1"), "IMG_1.HEIC"), idGen()),
-        null,
+        FALLBACK_RULES,
       ),
     ).toBe("Assign or discard every unassigned file.");
   });

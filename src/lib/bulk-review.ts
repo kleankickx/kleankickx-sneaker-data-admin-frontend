@@ -13,7 +13,14 @@ import {
   type ParsedFile,
 } from "./bulk-parser";
 import { DEFAULT_CONDITION } from "./conditions";
-import { contentTypeForName, formatFileSize } from "./image-types";
+import type { UploadConfig } from "./api";
+import {
+  FALLBACK_CONTENT_TYPES,
+  contentTypeForName,
+  contentTypesFromConfig,
+  formatFileSize,
+  type ContentTypeMap,
+} from "./image-types";
 
 export interface ReviewPair {
   /** Local row identity; client_ref is only assigned at Start. */
@@ -51,6 +58,24 @@ export const METADATA_MAX_LENGTH = {
 export type MetadataField = keyof typeof METADATA_MAX_LENGTH;
 
 export type NewId = () => string;
+
+/** Server limits that validation runs against; size is optional. */
+export interface ImageRules {
+  maxFileSize: number | null;
+  contentTypes: ContentTypeMap;
+}
+
+export const FALLBACK_RULES: ImageRules = {
+  maxFileSize: null,
+  contentTypes: FALLBACK_CONTENT_TYPES,
+};
+
+export function imageRulesFromConfig(config: UploadConfig | null): ImageRules {
+  return {
+    maxFileSize: config?.max_capture_image_size ?? null,
+    contentTypes: contentTypesFromConfig(config),
+  };
+}
 
 export const EMPTY_REVIEW: ReviewState = { pairs: [], unassigned: [] };
 
@@ -267,10 +292,8 @@ export function missingAngles(pair: ReviewPair): Angle[] {
  * Problems that block Start for one pair. Size is checked only when
  * the server's limit is known.
  */
-export function pairIssues(
-  pair: ReviewPair,
-  maxFileSize: number | null,
-): string[] {
+export function pairIssues(pair: ReviewPair, rules: ImageRules): string[] {
+  const { maxFileSize, contentTypes } = rules;
   const issues: string[] = [];
 
   const missing = missingAngles(pair);
@@ -282,7 +305,7 @@ export function pairIssues(
     const file = pair.files[angle];
     if (!file) continue;
 
-    if (contentTypeForName(file.name) === null) {
+    if (contentTypeForName(file.name, contentTypes) === null) {
       issues.push(`${angle} is not a supported image type`);
     }
     if (maxFileSize !== null && file.size > maxFileSize) {
@@ -298,12 +321,12 @@ export function pairIssues(
 /** Why Start is disabled, or null when the job can start. */
 export function startBlocker(
   state: ReviewState,
-  maxFileSize: number | null,
+  rules: ImageRules,
 ): string | null {
   if (state.pairs.length === 0) return "Add at least one pair.";
 
   const withIssues = state.pairs.filter(
-    (p) => pairIssues(p, maxFileSize).length > 0,
+    (p) => pairIssues(p, rules).length > 0,
   ).length;
   if (withIssues > 0) {
     return `${withIssues} ${withIssues === 1 ? "pair needs" : "pairs need"} attention.`;
@@ -327,6 +350,7 @@ export function startBlocker(
 export function buildRunInput(
   state: ReviewState,
   batchId: string,
+  contentTypes: ContentTypeMap = FALLBACK_CONTENT_TYPES,
 ): RunBulkUploadInput {
   const pairs: BulkPairPayload[] = [];
   const files: RunBulkUploadInput["files"] = {};
@@ -343,7 +367,7 @@ export function buildRunInput(
       condition: pair.condition,
       uploads: REQUIRED_ANGLES.map((angle) => {
         const file = pair.files[angle];
-        const contentType = file && contentTypeForName(file.name);
+        const contentType = file && contentTypeForName(file.name, contentTypes);
         if (!file || !contentType) {
           throw new Error(`Pair ${index + 1} is not ready (${angle}).`);
         }

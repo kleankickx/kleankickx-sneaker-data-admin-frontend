@@ -6,6 +6,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import {
@@ -65,6 +66,7 @@ beforeEach(() => {
   vi.mocked(getUploadConfig).mockReset().mockRejectedValue(new Error("404"));
   vi.mocked(runBulkUpload).mockClear();
   vi.spyOn(console, "debug").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.stubGlobal(
     "URL",
     Object.assign(URL, {
@@ -213,6 +215,7 @@ describe("BulkUploadModal", () => {
       max_capture_image_size: 100,
       allowed_content_types: ["image/jpeg"],
       required_angles: [...REQUIRED_ANGLES],
+      extension_to_content_type: { jpg: "image/jpeg" },
     });
     renderModal();
     chooseFiles([
@@ -224,6 +227,56 @@ describe("BulkUploadModal", () => {
       await screen.findByText("overview is 200 B — max is 100 B"),
     ).toBeInTheDocument();
     expect(startButton()).toBeDisabled();
+  });
+
+  it("skips size checks and warns once when config is unavailable", async () => {
+    vi.resetModules();
+    const { default: FreshModal } = await import("./BulkUploadModal");
+
+    const first = render(
+      <FreshModal open batchId="batch-1" onClose={() => {}} />,
+    );
+    await waitFor(() => expect(console.warn).toHaveBeenCalledTimes(1));
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("upload config unavailable"),
+    );
+
+    // 50 MB reported size without allocating it.
+    const huge = pairFiles("pair-1").map((f) =>
+      Object.defineProperty(f, "size", { value: 50_000_000 }),
+    );
+    chooseFiles(huge);
+    expect(screen.queryByText(/max is/)).not.toBeInTheDocument();
+    expect(startButton()).toBeEnabled();
+
+    first.unmount();
+    render(<FreshModal open batchId="batch-1" onClose={() => {}} />);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(console.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the config's type map once it loads", async () => {
+    vi.mocked(getUploadConfig).mockResolvedValue({
+      max_capture_image_size: 10_485_760,
+      allowed_content_types: ["image/jpeg"],
+      required_angles: [...REQUIRED_ANGLES],
+      extension_to_content_type: { jpg: "image/jpeg", png: "image/png" },
+    });
+    renderModal();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Choose files")).toHaveAttribute(
+        "accept",
+        ".jpg",
+      ),
+    );
+    chooseFiles(pairFiles("pair-1", [...REQUIRED_ANGLES], "png"));
+
+    expect(
+      screen.getByText("6 files skipped (unsupported type)"),
+    ).toBeInTheDocument();
+    expect(console.warn).not.toHaveBeenCalled();
   });
 
   it("skips unsupported types and reports an empty result", () => {

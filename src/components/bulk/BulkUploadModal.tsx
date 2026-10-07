@@ -24,6 +24,7 @@ import {
   buildReviewState,
   buildRunInput,
   discardUnassigned,
+  imageRulesFromConfig,
   pairIssues,
   removePair,
   setPairFile,
@@ -39,7 +40,7 @@ import { runBulkUpload } from "../../lib/bulk-upload-driver";
 import { useBulkUpload, type JobPhase } from "../../lib/bulk-upload-store";
 import { CONDITION_OPTIONS } from "../../lib/conditions";
 import {
-  IMAGE_ACCEPT,
+  acceptFor,
   contentTypeForName,
   formatFileSize,
 } from "../../lib/image-types";
@@ -60,6 +61,27 @@ const ACTIVE_PHASES: ReadonlySet<JobPhase> = new Set([
 
 const UNSUPPORTED_TYPE_ERROR =
   "Unsupported file type. Use JPEG, PNG, WebP or HEIC.";
+
+/* One console warning per problem per session, not per modal open. */
+const warned = new Set<string>();
+function warnOnce(key: string, message: string): void {
+  if (warned.has(key)) return;
+  warned.add(key);
+  console.warn(`[bulk] ${message}`);
+}
+
+/* The parser's angle list is compiled in (it defines the Angle type);
+   the server's list is checked against it rather than replacing it. */
+function checkRequiredAngles(config: UploadConfig): void {
+  const server = [...config.required_angles].sort().join(",");
+  const client = [...REQUIRED_ANGLES].sort().join(",");
+  if (server !== client) {
+    warnOnce(
+      "angles",
+      `server required_angles (${server}) differ from the client's (${client})`,
+    );
+  }
+}
 
 const METADATA_FIELDS: Array<{ field: MetadataField; label: string }> = [
   { field: "brand", label: "Brand" },
@@ -171,6 +193,7 @@ function FilePreview({ file, compact = false }: { file: File; compact?: boolean 
    ============================================================ */
 
 function IntakeStep({
+  accept,
   parseError,
   skipped,
   canReturn,
@@ -178,6 +201,7 @@ function IntakeStep({
   onDropError,
   onReturn,
 }: {
+  accept: string;
   parseError: string | null;
   skipped: number;
   canReturn: boolean;
@@ -259,7 +283,7 @@ function IntakeStep({
               ref={filesRef}
               type="file"
               multiple
-              accept={IMAGE_ACCEPT}
+              accept={accept}
               className="sr-only"
               onChange={(event) => handlePick(event, false)}
             />
@@ -574,18 +598,24 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
     let active = true;
     getUploadConfig().then(
       (loaded) => {
+        checkRequiredAngles(loaded);
         if (active) setConfig(loaded);
       },
-      () => console.debug("[bulk] upload config unavailable; size checks off"),
+      () =>
+        warnOnce(
+          "config",
+          "upload config unavailable; size checks off, local type map in use",
+        ),
     );
     return () => {
       active = false;
     };
   }, []);
 
-  const maxFileSize = config?.max_capture_image_size ?? null;
+  const rules = imageRulesFromConfig(config);
+  const accept = acceptFor(rules.contentTypes);
   const jobActive = ACTIVE_PHASES.has(phase);
-  const blocker = startBlocker(review, maxFileSize);
+  const blocker = startBlocker(review, rules);
   const hasReview = review.pairs.length > 0 || review.unassigned.length > 0;
 
   /* ---------------- intake ---------------- */
@@ -593,7 +623,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
   function handleInputs(inputs: DroppedInput[]) {
     const usable = inputs.filter((i) => !isIgnoredFile(i.relativePath));
     const supported = usable.filter(
-      (i) => contentTypeForName(i.file.name) !== null,
+      (i) => contentTypeForName(i.file.name, rules.contentTypes) !== null,
     );
 
     if (
@@ -635,7 +665,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
     if (!file || !target) return;
 
     const key = `${target.rowId}:${target.angle}`;
-    if (contentTypeForName(file.name) === null) {
+    if (contentTypeForName(file.name, rules.contentTypes) === null) {
       setTileErrors((errors) => ({ ...errors, [key]: UNSUPPORTED_TYPE_ERROR }));
       return;
     }
@@ -666,9 +696,9 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
     setStarting(true);
 
     // The panel reports the job from here on, including a failed start.
-    runBulkUpload(buildRunInput(review, batchId)).catch((error) =>
-      console.debug("[bulk] job did not start", error),
-    );
+    runBulkUpload(
+      buildRunInput(review, batchId, rules.contentTypes),
+    ).catch((error) => console.debug("[bulk] job did not start", error));
     onClose();
   }
 
@@ -716,6 +746,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           {step === "intake" ? (
             <IntakeStep
+              accept={accept}
               parseError={parseError}
               skipped={skipped}
               canReturn={hasReview}
@@ -740,7 +771,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
                     key={pair.rowId}
                     pair={pair}
                     number={index + 1}
-                    issues={pairIssues(pair, maxFileSize)}
+                    issues={pairIssues(pair, rules)}
                     tileErrors={tileErrors}
                     onPickTile={(angle) => openTilePicker(pair.rowId, angle)}
                     onRemoveTile={(angle) =>
@@ -809,7 +840,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
               <input
                 ref={tileInputRef}
                 type="file"
-                accept={IMAGE_ACCEPT}
+                accept={accept}
                 className="sr-only"
                 tabIndex={-1}
                 aria-hidden="true"

@@ -656,6 +656,7 @@ export interface UploadConfig {
   max_capture_image_size: number;
   allowed_content_types: string[];
   required_angles: string[];
+  extension_to_content_type: Record<string, string>;
 }
 
 export async function getUploadConfig(): Promise<UploadConfig> {
