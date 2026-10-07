@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 
 import {
   completeVerification,
+  identifySneaker,
+  startIdentification,
   updateSneaker,
   type SneakerPairEdit,
   type SneakerVerificationPayload,
@@ -44,6 +46,29 @@ function normalise(values: Values): Values {
     condition: values.condition,
   };
 }
+
+/*
+ * The backend's workflow before verification. Each step is its own
+ * endpoint; the panel offers whichever one the pair is at.
+ */
+const STEPS = {
+  received: {
+    step: "Step 1 of 3",
+    action: "Start identification",
+    busy: "Starting…",
+    text: "Moves the pair into identification so its details can be confirmed.",
+    done: "Identification started.",
+  },
+  identification: {
+    step: "Step 2 of 3",
+    action: "Confirm identification",
+    busy: "Confirming…",
+    text: "Records the brand, model, SKU and size above as the identification and moves the pair to verification.",
+    done: "Identification confirmed. Ready for verification.",
+  },
+} as const;
+
+type Step = keyof typeof STEPS;
 
 function same(a: string, b: string) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -137,8 +162,8 @@ function VerificationField({
 }
 
 /**
- * The verifier's decision: correct the pair's values, save them, and
- * mark the pair verified. AI suggestions sit beside each value but are
+ * The verifier's decision: correct the pair's values, save them, move
+ * the pair through identification, and mark it verified. AI suggestions sit beside each value but are
  * never applied unless the verifier chooses to.
  *
  * Render with key={pair.updated_at} so it resets when the pair changes.
@@ -149,6 +174,7 @@ export default function VerificationPanel({
   blockers,
   checkingEligibility,
   onSaved,
+  onAdvanced,
   onVerified,
 }: {
   pair: SneakerPair;
@@ -157,15 +183,19 @@ export default function VerificationPanel({
   blockers: string[];
   checkingEligibility: boolean;
   onSaved: (pair: SneakerPair) => void;
+  /* The pair moved to the next workflow step. */
+  onAdvanced: (pair: SneakerPair, message: string) => void;
   onVerified: (pair: SneakerPair) => void;
 }) {
   const [saved] = useState(() => savedValues(pair));
   const [values, setValues] = useState(saved);
-  const [busy, setBusy] = useState<"save" | "verify" | null>(null);
+  const [busy, setBusy] = useState<"save" | "advance" | "verify" | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<ApiFormError<Field> | null>(null);
 
-  const isVerified = pair.status.toLowerCase() === "verified";
+  const status = pair.status.toLowerCase();
+  const isVerified = status === "verified";
+  const step = status in STEPS ? STEPS[status as Step] : null;
   const clean = normalise(values);
   const changes = (Object.keys(clean) as Field[]).reduce<SneakerPairEdit>(
     (diff, field) =>
@@ -181,7 +211,7 @@ export default function VerificationPanel({
   }
 
   async function run(
-    kind: "save" | "verify",
+    kind: "save" | "advance" | "verify",
     request: () => Promise<SneakerPair>,
     done: (pair: SneakerPair) => void,
   ) {
@@ -195,9 +225,11 @@ export default function VerificationPanel({
       setError(
         readApiError<Field>(
           err,
-          kind === "save"
-            ? "Could not save changes. Please try again."
-            : "Could not verify this pair. Please try again.",
+          {
+            save: "Could not save changes. Please try again.",
+            advance: "Could not update this pair. Please try again.",
+            verify: "Could not verify this pair. Please try again.",
+          }[kind],
         ),
       );
       setConfirming(false);
@@ -209,6 +241,25 @@ export default function VerificationPanel({
     event.preventDefault();
     if (!dirty) return;
     run("save", () => updateSneaker(pair.id, changes), onSaved);
+  }
+
+  function handleAdvance() {
+    if (!step) return;
+
+    run(
+      "advance",
+      async () => {
+        // The step endpoints don't store the pair's own values, so
+        // unsaved edits go through the normal update first.
+        if (dirty) await updateSneaker(pair.id, changes);
+
+        if (status === "received") return startIdentification(pair.id);
+
+        const { brand, model, sku, size } = clean;
+        return identifySneaker(pair.id, { brand, model, sku, size });
+      },
+      (updated) => onAdvanced(updated, step.done),
+    );
   }
 
   function handleVerify() {
@@ -305,7 +356,16 @@ export default function VerificationPanel({
           </div>
         ) : (
           <div className="space-y-3 border-t border-gray-100 px-5 py-4 sm:px-6">
-            {!checkingEligibility && blockers.length > 0 && (
+            {step && (
+              <p className="text-xs text-gray-500">
+                <span className="font-medium text-gray-700">
+                  {step.step} · {step.action}.
+                </span>{" "}
+                {step.text}
+              </p>
+            )}
+
+            {!step && !checkingEligibility && blockers.length > 0 && (
               <div className="rounded-lg bg-gray-50 px-3 py-2.5">
                 <p className="text-xs font-medium text-gray-700">
                   Can't be marked verified yet:
@@ -366,17 +426,36 @@ export default function VerificationPanel({
                   )}
                   {busy === "save" ? "Saving…" : "Save changes"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming(true)}
-                  disabled={!canVerify || busy !== null}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
-                    verified
-                  </span>
-                  {checkingEligibility ? "Checking…" : "Mark as verified"}
-                </button>
+                {step ? (
+                  <button
+                    type="button"
+                    onClick={handleAdvance}
+                    disabled={busy !== null}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`material-symbols-outlined text-[18px] ${
+                        busy === "advance" ? "animate-spin" : ""
+                      }`}
+                    >
+                      {busy === "advance" ? "progress_activity" : "arrow_forward"}
+                    </span>
+                    {busy === "advance" ? step.busy : step.action}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirming(true)}
+                    disabled={!canVerify || busy !== null}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                      verified
+                    </span>
+                    {checkingEligibility ? "Checking…" : "Mark as verified"}
+                  </button>
+                )}
               </div>
             )}
           </div>

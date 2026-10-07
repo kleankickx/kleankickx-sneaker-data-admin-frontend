@@ -10,13 +10,20 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { completeVerification, updateSneaker } from "../../lib/api";
+import {
+  completeVerification,
+  identifySneaker,
+  startIdentification,
+  updateSneaker,
+} from "../../lib/api";
 import type { SneakerIdentification, SneakerPair } from "../../lib/types";
 import VerificationPanel from "./VerificationPanel";
 
 vi.mock("../../lib/api", () => ({
   updateSneaker: vi.fn(),
   completeVerification: vi.fn(),
+  startIdentification: vi.fn(),
+  identifySneaker: vi.fn(),
 }));
 
 const pair: SneakerPair = {
@@ -51,6 +58,7 @@ function renderPanel(
 ) {
   const onSaved = vi.fn();
   const onVerified = vi.fn();
+  const onAdvanced = vi.fn();
   render(
     <VerificationPanel
       pair={pair}
@@ -58,11 +66,12 @@ function renderPanel(
       blockers={[]}
       checkingEligibility={false}
       onSaved={onSaved}
+      onAdvanced={onAdvanced}
       onVerified={onVerified}
       {...props}
     />,
   );
-  return { onSaved, onVerified };
+  return { onSaved, onVerified, onAdvanced };
 }
 
 const button = (name: string) => screen.getByRole("button", { name });
@@ -71,6 +80,8 @@ const button = (name: string) => screen.getByRole("button", { name });
 beforeEach(() => {
   vi.mocked(updateSneaker).mockReset();
   vi.mocked(completeVerification).mockReset();
+  vi.mocked(startIdentification).mockReset();
+  vi.mocked(identifySneaker).mockReset();
 });
 afterEach(cleanup);
 
@@ -194,5 +205,48 @@ describe("VerificationPanel", () => {
     expect(screen.getByLabelText("Condition")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Mark as verified" })).toBeNull();
     expect(screen.getByText("This pair has been verified.")).toBeInTheDocument();
+  });
+
+  it("offers Start identification for a received pair", async () => {
+    const moved = { ...pair, status: "identification" };
+    vi.mocked(startIdentification).mockResolvedValue(moved);
+    const { onAdvanced } = renderPanel({ pair: { ...pair, status: "received" } });
+
+    expect(screen.queryByRole("button", { name: "Mark as verified" })).toBeNull();
+    fireEvent.click(button("Start identification"));
+
+    await waitFor(() =>
+      expect(onAdvanced).toHaveBeenCalledWith(moved, "Identification started."),
+    );
+    expect(startIdentification).toHaveBeenCalledWith("pair-uuid");
+    expect(updateSneaker).not.toHaveBeenCalled();
+  });
+
+  it("saves edits, then confirms the identification", async () => {
+    const moved = { ...pair, status: "verification", model: "Air Max 90" };
+    vi.mocked(updateSneaker).mockResolvedValue(moved);
+    vi.mocked(identifySneaker).mockResolvedValue(moved);
+    const { onAdvanced } = renderPanel({
+      pair: { ...pair, status: "identification" },
+    });
+
+    fireEvent.change(screen.getByLabelText("Model"), {
+      target: { value: "Air Max 90" },
+    });
+    fireEvent.click(button("Confirm identification"));
+
+    await waitFor(() => expect(onAdvanced).toHaveBeenCalled());
+    expect(updateSneaker).toHaveBeenCalledWith("pair-uuid", {
+      model: "Air Max 90",
+    });
+    expect(identifySneaker).toHaveBeenCalledWith("pair-uuid", {
+      brand: "Nike",
+      model: "Air Max 90",
+      sku: "",
+      size: "42",
+    });
+    expect(
+      vi.mocked(updateSneaker).mock.invocationCallOrder[0],
+    ).toBeLessThan(vi.mocked(identifySneaker).mock.invocationCallOrder[0]);
   });
 });

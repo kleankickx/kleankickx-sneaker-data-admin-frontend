@@ -548,6 +548,11 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
                 setSneaker(updated);
                 setToast({ type: "success", message: "Changes saved." });
               }}
+              onAdvanced={(updated, message) => {
+                setSneaker(updated);
+                reloadEligibility();
+                setToast({ type: "success", message });
+              }}
               onVerified={(updated) => {
                 setSneaker(updated);
                 setToast({ type: "success", message: "Pair verified." });

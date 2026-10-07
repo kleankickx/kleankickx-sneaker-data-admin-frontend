@@ -846,3 +846,36 @@ export async function completeVerification(
 
   return response.data.data;
 }
+
+/** Received → identification. */
+export async function startIdentification(
+  sneakerId: string,
+): Promise<SneakerPair> {
+  const response = await api.post<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/start-identification/`,
+  );
+
+  return response.data.data;
+}
+
+/* Matches SneakerIdentificationSerializer. */
+export type SneakerIdentificationPayload = Omit<
+  SneakerVerificationPayload,
+  "condition"
+>;
+
+/**
+ * Records a manual identification and moves the pair from
+ * identification → verification.
+ */
+export async function identifySneaker(
+  sneakerId: string,
+  data: SneakerIdentificationPayload,
+): Promise<SneakerPair> {
+  const response = await api.post<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/identify/`,
+    data,
+  );
+
+  return response.data.data;
+}

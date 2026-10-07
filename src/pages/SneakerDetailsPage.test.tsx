@@ -106,10 +106,13 @@ describe("SneakerDetailsPage", () => {
     expect(
       await screen.findByText("AI analysis not available yet"),
     ).toBeInTheDocument();
+    // A received pair is offered the first workflow step, not verification.
     expect(
-      await screen.findByText("Sneaker pair must be in verification status."),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Mark as verified" })).toBeDisabled();
+      screen.getByRole("button", { name: "Start identification" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Mark as verified" }),
+    ).not.toBeInTheDocument();
 
     expect(getLatestAiJob).toHaveBeenCalledWith("pair-uuid");
     expect(post).not.toHaveBeenCalled();
