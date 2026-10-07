@@ -40,6 +40,12 @@ import { runBulkUpload } from "../../lib/bulk-upload-driver";
 import { useBulkUpload, type JobPhase } from "../../lib/bulk-upload-store";
 import { CONDITION_OPTIONS } from "../../lib/conditions";
 import {
+  GUIDE_STEP,
+  hasSeenBulkGuide,
+  markBulkGuideSeen,
+} from "../../lib/bulk-guide";
+import BulkUploadGuide from "./BulkUploadGuide";
+import {
   acceptFor,
   contentTypeForName,
   formatFileSize,
@@ -200,8 +206,10 @@ function IntakeStep({
   onInputs,
   onDropError,
   onReturn,
+  onHelp,
 }: {
   accept: string;
+  onHelp: () => void;
   parseError: string | null;
   skipped: number;
   canReturn: boolean;
@@ -290,6 +298,15 @@ function IntakeStep({
           </label>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onHelp}
+        className="inline-flex items-center gap-1 text-sm font-medium text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline"
+      >
+        <MaterialIcon name="help" className="text-[18px]" />
+        How should I organise my files?
+      </button>
 
       {parseError && (
         <p role="alert" className="text-sm text-red-700">
@@ -580,6 +597,10 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
   const phase = useBulkUpload((s) => s.phase);
 
   const [step, setStep] = useState<Step>("intake");
+  /* Open guide step, or null. Shown automatically the first time. */
+  const [guideStep, setGuideStep] = useState<number | null>(() =>
+    hasSeenBulkGuide() ? null : GUIDE_STEP.photos,
+  );
   const [config, setConfig] = useState<UploadConfig | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [skipped, setSkipped] = useState(0);
@@ -680,6 +701,11 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
 
   /* ---------------- footer ---------------- */
 
+  function closeGuide() {
+    markBulkGuideSeen();
+    setGuideStep(null);
+  }
+
   function handleCancel() {
     if (
       step === "review" &&
@@ -713,7 +739,9 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
       aria-modal="true"
       aria-labelledby="bulk-upload-title"
       onKeyDown={(event) => {
-        if (event.key === "Escape") handleCancel();
+        if (event.key !== "Escape") return;
+        if (guideStep !== null) closeGuide();
+        else handleCancel();
       }}
     >
       <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
@@ -733,159 +761,190 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
                   } before uploading.`}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="text-gray-400 hover:text-gray-700"
-            aria-label="Close"
-          >
-            <MaterialIcon name="close" />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {step === "intake" ? (
-            <IntakeStep
-              accept={accept}
-              parseError={parseError}
-              skipped={skipped}
-              canReturn={hasReview}
-              onInputs={handleInputs}
-              onDropError={() =>
-                setParseError("Could not read the dropped files.")
-              }
-              onReturn={() => setStep("review")}
-            />
-          ) : (
-            <div className="space-y-6 p-6">
-              {skipped > 0 && (
-                <p className="text-xs text-gray-500">
-                  {skipped} {skipped === 1 ? "file" : "files"} skipped
-                  (unsupported type)
-                </p>
-              )}
-
-              <ul className="space-y-3">
-                {review.pairs.map((pair, index) => (
-                  <PairCard
-                    key={pair.rowId}
-                    pair={pair}
-                    number={index + 1}
-                    issues={pairIssues(pair, rules)}
-                    tileErrors={tileErrors}
-                    onPickTile={(angle) => openTilePicker(pair.rowId, angle)}
-                    onRemoveTile={(angle) =>
-                      setReview((state) =>
-                        unassignPairFile(state, pair.rowId, angle, newId),
-                      )
-                    }
-                    onRemovePair={() =>
-                      setReview((state) => removePair(state, pair.rowId, newId))
-                    }
-                    onMetadata={(field, value) =>
-                      setReview((state) =>
-                        updatePairMetadata(state, pair.rowId, field, value),
-                      )
-                    }
-                  />
-                ))}
-              </ul>
-
+          <div className="flex items-center gap-2">
+            {guideStep === null && (
               <button
                 type="button"
-                onClick={() =>
-                  setReview((state) => addEmptyPair(state, newId()))
-                }
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gray-300 py-3 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:text-gray-900"
+                onClick={() => setGuideStep(GUIDE_STEP.photos)}
+                className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
               >
-                <MaterialIcon name="add" className="text-[18px]" />
-                Add pair
+                <MaterialIcon name="help" className="text-[18px]" />
+                How it works
               </button>
+            )}
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-gray-400 hover:text-gray-700"
+              aria-label="Close"
+            >
+              <MaterialIcon name="close" />
+            </button>
+          </div>
+        </div>
 
-              {review.unassigned.length > 0 && (
-                <section aria-labelledby="bulk-unassigned-title">
-                  <h3
-                    id="bulk-unassigned-title"
-                    className="text-sm font-semibold text-gray-900"
-                  >
-                    Unassigned ({review.unassigned.length})
-                  </h3>
-                  {review.pairs.length === 0 && (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Add a pair, then assign these files to it.
+        {guideStep !== null ? (
+          <BulkUploadGuide
+            key={guideStep}
+            maxFileSize={rules.maxFileSize}
+            initialStep={guideStep}
+            onClose={closeGuide}
+          />
+        ) : (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {step === "intake" ? (
+                <IntakeStep
+                  accept={accept}
+                  parseError={parseError}
+                  skipped={skipped}
+                  canReturn={hasReview}
+                  onInputs={handleInputs}
+                  onDropError={() =>
+                    setParseError("Could not read the dropped files.")
+                  }
+                  onReturn={() => setStep("review")}
+                  onHelp={() => setGuideStep(GUIDE_STEP.folders)}
+                />
+              ) : (
+                <div className="space-y-6 p-6">
+                  {skipped > 0 && (
+                    <p className="text-xs text-gray-500">
+                      {skipped} {skipped === 1 ? "file" : "files"} skipped
+                      (unsupported type)
                     </p>
                   )}
-                  <ul className="mt-1 divide-y divide-gray-100">
-                    {review.unassigned.map((entry) => (
-                      <UnassignedRow
-                        key={entry.id}
-                        entry={entry}
-                        pairs={review.pairs}
-                        onAssign={(rowId, angle) =>
+
+                  <ul className="space-y-3">
+                    {review.pairs.map((pair, index) => (
+                      <PairCard
+                        key={pair.rowId}
+                        pair={pair}
+                        number={index + 1}
+                        issues={pairIssues(pair, rules)}
+                        tileErrors={tileErrors}
+                        onPickTile={(angle) => openTilePicker(pair.rowId, angle)}
+                        onRemoveTile={(angle) =>
                           setReview((state) =>
-                            assignFile(state, entry.id, rowId, angle, newId),
+                            unassignPairFile(state, pair.rowId, angle, newId),
                           )
                         }
-                        onDiscard={() =>
+                        onRemovePair={() =>
+                          setReview((state) => removePair(state, pair.rowId, newId))
+                        }
+                        onMetadata={(field, value) =>
                           setReview((state) =>
-                            discardUnassigned(state, entry.id),
+                            updatePairMetadata(state, pair.rowId, field, value),
                           )
                         }
                       />
                     ))}
                   </ul>
-                </section>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReview((state) => addEmptyPair(state, newId()))
+                    }
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gray-300 py-3 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:text-gray-900"
+                  >
+                    <MaterialIcon name="add" className="text-[18px]" />
+                    Add pair
+                  </button>
+
+                  {review.unassigned.length > 0 && (
+                    <section aria-labelledby="bulk-unassigned-title">
+                      <h3
+                        id="bulk-unassigned-title"
+                        className="text-sm font-semibold text-gray-900"
+                      >
+                        Unassigned ({review.unassigned.length})
+                      </h3>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {review.pairs.length === 0
+                          ? "Add a pair, then assign these files to it."
+                          : "Choose a pair and an angle, then Assign. Discard photos you don't need."}{" "}
+                        <button
+                          type="button"
+                          onClick={() => setGuideStep(GUIDE_STEP.review)}
+                          className="font-medium text-gray-700 underline underline-offset-2 hover:text-gray-900"
+                        >
+                          How assigning works
+                        </button>
+                      </p>
+                      <ul className="mt-1 divide-y divide-gray-100">
+                        {review.unassigned.map((entry) => (
+                          <UnassignedRow
+                            key={entry.id}
+                            entry={entry}
+                            pairs={review.pairs}
+                            onAssign={(rowId, angle) =>
+                              setReview((state) =>
+                                assignFile(state, entry.id, rowId, angle, newId),
+                              )
+                            }
+                            onDiscard={() =>
+                              setReview((state) =>
+                                discardUnassigned(state, entry.id),
+                              )
+                            }
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
+                  <input
+                    ref={tileInputRef}
+                    type="file"
+                    accept={accept}
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    onChange={handleTilePicked}
+                  />
+                </div>
               )}
-
-              <input
-                ref={tileInputRef}
-                type="file"
-                accept={accept}
-                className="sr-only"
-                tabIndex={-1}
-                aria-hidden="true"
-                onChange={handleTilePicked}
-              />
             </div>
-          )}
-        </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-200 px-6 py-4">
-          <div className="min-w-0">
-            {step === "review" && (
-              <button
-                type="button"
-                onClick={() => setStep("intake")}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900"
-              >
-                Back
-              </button>
-            )}
-          </div>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-200 px-6 py-4">
+              <div className="min-w-0">
+                {step === "review" && (
+                  <button
+                    type="button"
+                    onClick={() => setStep("intake")}
+                    className="text-sm font-medium text-gray-600 hover:text-gray-900"
+                  >
+                    Back
+                  </button>
+                )}
+              </div>
 
-          <div className="flex items-center gap-3">
-            {step === "review" && startDisabledReason && (
-              <p className="text-xs text-gray-500">{startDisabledReason}</p>
-            )}
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-            {step === "review" && (
-              <button
-                type="button"
-                onClick={handleStart}
-                disabled={Boolean(startDisabledReason) || starting}
-                className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Start upload
-              </button>
-            )}
-          </div>
-        </div>
+              <div className="flex items-center gap-3">
+                {step === "review" && startDisabledReason && (
+                  <p className="text-xs text-gray-500">{startDisabledReason}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                {step === "review" && (
+                  <button
+                    type="button"
+                    onClick={handleStart}
+                    disabled={Boolean(startDisabledReason) || starting}
+                    className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Start upload
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

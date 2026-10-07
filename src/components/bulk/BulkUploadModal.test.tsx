@@ -49,6 +49,8 @@ function chooseFiles(files: File[]) {
   });
 }
 
+const GUIDE_SEEN_KEY = "kkx.bulkUploadGuideSeen";
+
 const startButton = () =>
   screen.getByRole("button", { name: "Start upload" });
 
@@ -75,6 +77,8 @@ beforeEach(() => {
     }),
   );
   vi.spyOn(window, "confirm").mockReturnValue(true);
+  // Most tests are about the upload flow, not the first-visit guide.
+  window.localStorage.setItem(GUIDE_SEEN_KEY, "1");
 });
 
 afterEach(() => {
@@ -368,5 +372,111 @@ describe("BulkUploadModal", () => {
     expect(
       screen.getByRole("listitem", { name: "Pair 1" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("BulkUploadModal guide", () => {
+  beforeEach(() => window.localStorage.removeItem(GUIDE_SEEN_KEY));
+
+  const guideTitle = () =>
+    screen.queryByRole("heading", { level: 3 })?.textContent;
+
+  it("opens on first visit and walks through every step", () => {
+    renderModal();
+
+    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+    expect(guideTitle()).toBe("Shoot six angles for every pair");
+    expect(screen.queryByLabelText("Choose files")).not.toBeInTheDocument();
+
+    for (let step = 2; step <= 6; step++) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(screen.getByText(`Step ${step} of 6`)).toBeInTheDocument();
+    }
+    expect(guideTitle()).toBe("Uploading and tracking progress");
+
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByText("Step 5 of 6")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Got it" }));
+
+    expect(screen.getByLabelText("Choose files")).toBeInTheDocument();
+    expect(window.localStorage.getItem(GUIDE_SEEN_KEY)).toBe("1");
+  });
+
+  it("is not shown again once skipped", () => {
+    const first = renderModal();
+    fireEvent.click(screen.getByRole("button", { name: "Skip guide" }));
+    first.unmount();
+
+    renderModal();
+
+    expect(screen.queryByText(/Step \d of 6/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Choose files")).toBeInTheDocument();
+  });
+
+  it("reopens from How it works and closes on Escape without closing the modal", () => {
+    window.localStorage.setItem(GUIDE_SEEN_KEY, "1");
+    renderModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "How it works" }));
+    expect(guideTitle()).toBe("Shoot six angles for every pair");
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    expect(guideTitle()).toBeUndefined();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("links to the folder step from intake and the review step from Unassigned", () => {
+    window.localStorage.setItem(GUIDE_SEEN_KEY, "1");
+    renderModal();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "How should I organise my files?" }),
+    );
+    expect(guideTitle()).toBe("Easiest: one folder per pair");
+    fireEvent.click(screen.getByRole("button", { name: "Skip guide" }));
+
+    chooseFiles([...pairFiles("pair-1"), file("IMG_1.HEIC")]);
+    fireEvent.click(screen.getByRole("button", { name: "How assigning works" }));
+
+    expect(guideTitle()).toBe("Review and fix before uploading");
+    fireEvent.click(screen.getByRole("button", { name: "Skip guide" }));
+    // Review state survives a trip through the guide.
+    expect(screen.getByText("Unassigned (1)")).toBeInTheDocument();
+  });
+
+  it("states the server's size limit once config has loaded", async () => {
+    vi.mocked(getUploadConfig).mockResolvedValue({
+      max_capture_image_size: 10_485_760,
+      allowed_content_types: ["image/jpeg"],
+      required_angles: [...REQUIRED_ANGLES],
+      extension_to_content_type: { jpg: "image/jpeg" },
+    });
+    renderModal();
+    await waitFor(() => expect(getUploadConfig).toHaveBeenCalled());
+
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    }
+
+    expect(
+      await screen.findByText(/up to 10 MB per photo/),
+    ).toBeInTheDocument();
+  });
+
+  it("still works when browser storage is unavailable", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+
+    renderModal();
+    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skip guide" }));
+    expect(screen.getByLabelText("Choose files")).toBeInTheDocument();
   });
 });
