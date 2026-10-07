@@ -9,9 +9,9 @@ import {
 } from "react";
 
 import {
-  getMe,
   login as loginRequest,
   logout as logoutRequest,
+  restoreSession,
   type AuthUser,
 } from "./api";
 
@@ -30,13 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [initializing, setInitializing] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  /* Bootstrap: ask the server who we are on mount. */
+  /* Bootstrap: ask the server who we are on mount, refreshing an
+     expired access token first (see restoreSession). */
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
       try {
-        const me = await getMe();
+        const me = await restoreSession();
         if (!cancelled) {
           setUser(me);
           setSessionExpired(false);
