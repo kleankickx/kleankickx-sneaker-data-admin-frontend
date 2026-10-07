@@ -1,9 +1,11 @@
 import axios from "axios";
 import type {
+  AIIdentificationJob,
   ApiResponse,
   Batch,
   CaptureImage,
   SneakerPair,
+  VerificationEligibility,
 } from "./types";
 
 const API_BASE_URL =
@@ -786,6 +788,93 @@ export async function completeImageReplacement(
   const response = await api.post<ApiResponse<ImageReplacementResult>>(
     `/sneakers/${sneakerId}/image-replacements/complete/`,
     { image_ids: imageIds },
+  );
+
+  return response.data.data;
+}
+
+/* ============================================================
+   VERIFICATION
+   ============================================================ */
+
+/* Matches SneakerVerificationSerializer; condition is required. */
+export interface SneakerVerificationPayload {
+  brand: string;
+  model: string;
+  sku: string;
+  size: string;
+  condition: string;
+}
+
+/** The pair's most recent AI identification job, or null if none. */
+export async function getLatestAiJob(
+  sneakerId: string,
+): Promise<AIIdentificationJob | null> {
+  const response = await api.get<ApiResponse<AIIdentificationJob[]>>(
+    "/ai-identification-jobs/",
+    {
+      params: {
+        sneaker_pair: sneakerId,
+        ordering: "-created_at",
+        page_size: 1,
+      },
+    },
+  );
+
+  return response.data.data[0] ?? null;
+}
+
+export async function getVerificationEligibility(
+  sneakerId: string,
+): Promise<VerificationEligibility> {
+  const response = await api.get<ApiResponse<VerificationEligibility>>(
+    `/sneakers/${sneakerId}/verification-eligibility/`,
+  );
+
+  return response.data.data;
+}
+
+/** Saves the verified values and moves the pair to "verified". */
+export async function completeVerification(
+  sneakerId: string,
+  data: SneakerVerificationPayload,
+): Promise<SneakerPair> {
+  const response = await api.post<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/complete/`,
+    data,
+  );
+
+  return response.data.data;
+}
+
+/** Received → identification. */
+export async function startIdentification(
+  sneakerId: string,
+): Promise<SneakerPair> {
+  const response = await api.post<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/start-identification/`,
+  );
+
+  return response.data.data;
+}
+
+/* Matches SneakerIdentificationSerializer. */
+export type SneakerIdentificationPayload = Omit<
+  SneakerVerificationPayload,
+  "condition"
+>;
+
+/**
+ * Records a manual identification and moves the pair from
+ * identification → verification.
+ */
+export async function identifySneaker(
+  sneakerId: string,
+  data: SneakerIdentificationPayload,
+): Promise<SneakerPair> {
+  const response = await api.post<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/identify/`,
+    data,
   );
 
   return response.data.data;
