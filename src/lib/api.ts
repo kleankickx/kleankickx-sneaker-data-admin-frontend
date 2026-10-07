@@ -725,3 +725,43 @@ export async function deleteSneaker(
 
   return response.data.data;
 }
+
+/* ============================================================
+   REPLACE PAIR IMAGES
+   ============================================================ */
+
+export interface ImageReplacementUpload {
+  angle: string;
+  file_size: number;
+  content_type: string;
+  original_filename?: string;
+}
+
+export interface ImageReplacementResult {
+  replaced: Array<{ image_id: string; angle: string }>;
+  failed: Array<{ image_id: string; error: string }>;
+}
+
+/* Current images stay in place until completeImageReplacement. */
+export async function startImageReplacement(
+  sneakerId: string,
+  uploads: ImageReplacementUpload[],
+): Promise<PairUploadSlot[]> {
+  const response = await api.post<
+    ApiResponse<{ upload_slots: PairUploadSlot[] }>
+  >(`/sneakers/${sneakerId}/image-replacements/`, { uploads });
+
+  return response.data.data.upload_slots;
+}
+
+export async function completeImageReplacement(
+  sneakerId: string,
+  imageIds: string[],
+): Promise<ImageReplacementResult> {
+  const response = await api.post<ApiResponse<ImageReplacementResult>>(
+    `/sneakers/${sneakerId}/image-replacements/complete/`,
+    { image_ids: imageIds },
+  );
+
+  return response.data.data;
+}
