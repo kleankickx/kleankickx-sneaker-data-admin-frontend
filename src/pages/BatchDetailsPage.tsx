@@ -26,6 +26,8 @@ import {
 
 import AddPairModal from "../components/AddPairModal";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
+import DeletePairDialog from "../components/sneakers/DeletePairDialog";
+import EditPairModal from "../components/sneakers/EditPairModal";
 import { useBulkUpload } from "../lib/bulk-upload-store";
 
 import type { SneakerPair } from "../lib/types";
@@ -796,6 +798,8 @@ export default function BatchDetailsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddPair, setShowAddPair] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [editingPair, setEditingPair] = useState<SneakerPair | null>(null);
+  const [deletingPair, setDeletingPair] = useState<SneakerPair | null>(null);
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
   const [confirmError, setConfirmError] = useState("");
@@ -1918,6 +1922,10 @@ export default function BatchDetailsPage() {
                   <th className="px-6 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Added
                   </th>
+
+                  <th className="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
 
@@ -1960,6 +1968,8 @@ export default function BatchDetailsPage() {
                         <td className="px-6 py-4">
                           <div className="ml-auto h-4 w-20 animate-pulse rounded bg-gray-200" />
                         </td>
+
+                        <td className="px-4 py-4" />
                       </tr>
                     ))
                   : details.pairs.map((pair) => {
@@ -2038,6 +2048,33 @@ export default function BatchDetailsPage() {
 
                           <td className="whitespace-nowrap px-6 py-4 text-right text-xs text-gray-500">
                             {formatDate(pair.created_at)}
+                          </td>
+
+                          <td className="whitespace-nowrap px-4 py-4 text-right">
+                            <div className="inline-flex gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setEditingPair(pair)}
+                                aria-label={`Edit ${pair.pair_id ?? pair.id}`}
+                                title="Edit pair"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">
+                                  edit
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingPair(pair)}
+                                aria-label={`Delete ${pair.pair_id ?? pair.id}`}
+                                title="Delete pair"
+                                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+                              >
+                                <span className="material-symbols-outlined text-[18px]">
+                                  delete
+                                </span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -2259,6 +2296,36 @@ export default function BatchDetailsPage() {
         onDismiss={dismissCleanup}
         onConfirmStage={() => setCleanupConfirming(true)}
         onDelete={handleCleanupDelete}
+      />
+
+      {/* Edit / delete a pair */}
+      <EditPairModal
+        pair={editingPair}
+        onClose={() => setEditingPair(null)}
+        onSaved={(updated) => {
+          setEditingPair(null);
+          loadBatchDetails();
+          showToast(
+            "success",
+            `${updated.pair_id ?? "Pair"} updated.`,
+          );
+        }}
+      />
+
+      <DeletePairDialog
+        pair={deletingPair}
+        onClose={() => setDeletingPair(null)}
+        onDeleted={(result) => {
+          setDeletingPair(null);
+          // Removing the only pair on a later page: step back a page,
+          // which refetches; otherwise reload this page.
+          if (details && details.pairs.length === 1 && page > 1) {
+            setPage(page - 1);
+          } else {
+            loadBatchDetails();
+          }
+          showToast("success", `${result.pair_id} deleted.`);
+        }}
       />
 
       {/* Bulk upload modal */}

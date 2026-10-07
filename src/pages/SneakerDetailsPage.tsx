@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import DeletePairDialog from "../components/sneakers/DeletePairDialog";
+import EditPairModal from "../components/sneakers/EditPairModal";
 import { getSneaker } from "../lib/api";
 import type {
   CaptureImage,
@@ -173,6 +175,8 @@ export default function SneakerDetailsPage() {
   const [selectedImageId, setSelectedImageId] = useState<string | null>(
     null,
   );
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadSneaker = useCallback(
     async (isRefresh = false) => {
@@ -460,6 +464,28 @@ export default function SneakerDetailsPage() {
             <div className="flex shrink-0 flex-wrap gap-2">
               <button
                 type="button"
+                onClick={() => setEditing(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  edit
+                </span>
+                Edit
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeleting(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  delete
+                </span>
+                Delete
+              </button>
+
+              <button
+                type="button"
                 onClick={() => loadSneaker(true)}
                 disabled={refreshing}
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -490,6 +516,24 @@ export default function SneakerDetailsPage() {
             </div>
           </div>
         </section>
+
+        <EditPairModal
+          pair={editing ? sneaker : null}
+          onClose={() => setEditing(false)}
+          onSaved={(updated) => {
+            setSneaker(updated);
+            setEditing(false);
+            setToast({ type: "success", message: "Pair updated." });
+          }}
+        />
+
+        <DeletePairDialog
+          pair={deleting ? sneaker : null}
+          onClose={() => setDeleting(false)}
+          onDeleted={() =>
+            navigate(`/batches/${sneaker.batch}`, { replace: true })
+          }
+        />
 
         {/* Image gallery */}
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">

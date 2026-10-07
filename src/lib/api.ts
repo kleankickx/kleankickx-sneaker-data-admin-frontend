@@ -664,3 +664,64 @@ export async function getUploadConfig(): Promise<UploadConfig> {
 
   return response.data.data;
 }
+
+/* ============================================================
+   EDIT / DELETE SNEAKER PAIR
+   ============================================================ */
+
+export interface SneakerPairEdit {
+  brand?: string;
+  model?: string;
+  sku?: string;
+  size?: string;
+  condition?: string;
+}
+
+/* Matches SneakerPairDeletionService.preview in the backend. */
+export interface PairDeletionPreview {
+  capture_sessions: number;
+  images: number;
+  stored_files: number;
+  identifications: number;
+  materials: number;
+  ai_jobs: number;
+  is_verified: boolean;
+}
+
+export interface DeletePairResponse {
+  id: string;
+  pair_id: string;
+  deleted: PairDeletionPreview;
+}
+
+export async function updateSneaker(
+  sneakerId: string,
+  data: SneakerPairEdit,
+): Promise<SneakerPair> {
+  const response = await api.patch<ApiResponse<SneakerPair>>(
+    `/sneakers/${sneakerId}/`,
+    data,
+  );
+
+  return response.data.data;
+}
+
+export async function getSneakerDeletionPreview(
+  sneakerId: string,
+): Promise<PairDeletionPreview> {
+  const response = await api.get<ApiResponse<PairDeletionPreview>>(
+    `/sneakers/${sneakerId}/deletion-preview/`,
+  );
+
+  return response.data.data;
+}
+
+export async function deleteSneaker(
+  sneakerId: string,
+): Promise<DeletePairResponse> {
+  const response = await api.delete<ApiResponse<DeletePairResponse>>(
+    `/sneakers/${sneakerId}/`,
+  );
+
+  return response.data.data;
+}
