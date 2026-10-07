@@ -6,6 +6,7 @@ import {
 } from "react-router-dom";
 
 import { useAuth } from "../../lib/auth-context";
+import UploadPanel from "../bulk/UploadPanel";
 
 type NavigationItem = {
   name: string;
@@ -293,6 +294,9 @@ export default function AdminLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Bulk upload progress; renders nothing while idle. */}
+      <UploadPanel />
     </div>
   );
 }

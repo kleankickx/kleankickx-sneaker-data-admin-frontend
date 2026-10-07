@@ -25,6 +25,8 @@ import {
 } from "../lib/api";
 
 import AddPairModal from "../components/AddPairModal";
+import BulkUploadModal from "../components/bulk/BulkUploadModal";
+import { useBulkUpload } from "../lib/bulk-upload-store";
 
 import type { SneakerPair } from "../lib/types";
 
@@ -793,6 +795,7 @@ export default function BatchDetailsPage() {
   const [showActions, setShowActions] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddPair, setShowAddPair] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
   const [confirmError, setConfirmError] = useState("");
@@ -913,6 +916,21 @@ export default function BatchDetailsPage() {
     brandFilter,
     ordering,
   ]);
+
+  /* Refresh pairs when a bulk upload into this batch finishes. Failures
+     are explained by the upload panel, so no toast here. */
+  useEffect(
+    () =>
+      useBulkUpload.subscribe((state, prev) => {
+        if (state.phase === prev.phase || state.batchId !== batchId) return;
+        if (state.phase !== "done" && state.phase !== "failed") return;
+
+        // Off page 1, the page change itself triggers the fetch above.
+        if (page === 1) loadBatchDetails();
+        else setPage(1);
+      }),
+    [batchId, page, loadBatchDetails],
+  );
 
   /* Populate edit form */
   useEffect(() => {
@@ -1639,6 +1657,20 @@ export default function BatchDetailsPage() {
                 </button>
               )}
 
+              {/* Bulk upload — only for open batches */}
+              {batch.status.toLowerCase() === "open" && (
+                <button
+                  type="button"
+                  onClick={() => setShowBulkUpload(true)}
+                  className="inline-flex h-9 items-center gap-2 self-start rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 lg:self-auto"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    drive_folder_upload
+                  </span>
+                  Bulk upload
+                </button>
+              )}
+
               {/* Clean up / Cleanup running */}
               {isCleanupJobActive(cleanupJob) ? (
                 <button
@@ -2227,6 +2259,13 @@ export default function BatchDetailsPage() {
         onDismiss={dismissCleanup}
         onConfirmStage={() => setCleanupConfirming(true)}
         onDelete={handleCleanupDelete}
+      />
+
+      {/* Bulk upload modal */}
+      <BulkUploadModal
+        open={showBulkUpload}
+        batchId={batchId!}
+        onClose={() => setShowBulkUpload(false)}
       />
 
       {/* Add pair modal */}

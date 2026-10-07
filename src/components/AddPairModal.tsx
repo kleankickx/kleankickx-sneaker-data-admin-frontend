@@ -360,7 +360,7 @@ export default function AddPairModal({
           formData.append("file", state.file);
 
           Object.entries(slot.upload.fields).forEach(([k, v]) =>
-            formData.append(k, v),
+            formData.append(k, String(v)),
           );
 
           await uploadWithProgress(
