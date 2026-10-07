@@ -64,8 +64,9 @@ function isAbortError(error: unknown): boolean {
   return (error as { name?: string })?.name === "AbortError";
 }
 
-function httpStatus(error: unknown): number | undefined {
-  return (error as { response?: { status?: number } })?.response?.status;
+/* An axios error without a response never reached the server. */
+function hasHttpResponse(error: unknown): boolean {
+  return (error as { response?: unknown })?.response !== undefined;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -396,11 +397,12 @@ export function cancelBulkUpload(): void {
    ============================================================ */
 
 /*
- * Fresh upload instructions for a retry. The retry endpoint only
- * accepts images the server has marked FAILED, which bulk uploads never
- * are (client-side failures never reach the server and bulk complete
- * skips validation), so on a 4xx the item's original signed slot is
- * reused. Cloudinary accepts that signature for about an hour.
+ * Fresh upload instructions for a retry; the endpoint re-signs images
+ * in UPLOADING or FAILED status. If the server answers with an error
+ * (4xx/5xx) that error is surfaced: reusing a stale signature would
+ * only fail later and less clearly. Only when the request never got a
+ * response (network error) is the item's original signed slot reused;
+ * Cloudinary accepts that signature for about an hour.
  */
 async function freshSlot(
   item: QueueItem,
@@ -409,10 +411,7 @@ async function freshSlot(
     const { upload } = await retryCaptureImage(item.imageId!);
     return { uploadUrl: upload.upload_url, uploadFields: upload.fields };
   } catch (error) {
-    const status = httpStatus(error);
-    const rejected = status !== undefined && status >= 400 && status < 500;
-
-    if (rejected && item.uploadUrl) {
+    if (!hasHttpResponse(error) && item.uploadUrl) {
       console.debug(`[bulk] retry ${item.id}: reusing original slot`);
       return { uploadUrl: item.uploadUrl, uploadFields: item.uploadFields };
     }

@@ -144,6 +144,11 @@ function makeInput(
 
 const imageId = (ref: string, angle: string) => `img-${ref}-${angle}`;
 
+/* What axios rejects with when the request never got a response. */
+const NETWORK_ERROR = Object.assign(new Error("Network Error"), {
+  code: "ERR_NETWORK",
+});
+
 /** Fake create response; `omit` drops slots like "pair-0:top". */
 function fakeCreate(omit: string[] = []) {
   return async (
@@ -418,14 +423,30 @@ describe("retry", () => {
     expect(store().phase).toBe("done");
   });
 
-  it("reuses the original slot when the server refuses a retry", async () => {
+  it("surfaces a 4xx from the retry endpoint without falling back", async () => {
     await runWithFailures(["pair-0:top"]);
     vi.mocked(retryCaptureImage).mockRejectedValue({
       response: {
         status: 400,
-        data: { error: { message: "cannot be retried" } },
+        data: { error: { message: "Image in status 'done' cannot be retried." } },
       },
     });
+
+    await retryItem("pair-0:top");
+
+    expect(FakeXHR.sent).toHaveLength(0);
+    expect(completeCaptureImagesBulk).not.toHaveBeenCalled();
+    expect(item("pair-0:top")).toMatchObject({
+      status: "failed",
+      error: "Image in status 'done' cannot be retried.",
+      uploadUrl: "https://upload.test/original",
+    });
+    expect(store().phase).toBe("failed");
+  });
+
+  it("falls back to the original slot on a network error", async () => {
+    await runWithFailures(["pair-0:top"]);
+    vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);
 
     await retryItem("pair-0:top");
 
@@ -438,9 +459,7 @@ describe("retry", () => {
 
   it("fails the item again when the retry upload fails", async () => {
     await runWithFailures(["pair-0:top"]);
-    vi.mocked(retryCaptureImage).mockRejectedValue({
-      response: { status: 400 },
-    });
+    vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);
     FakeXHR.outcome = () => 502;
 
     await retryItem("pair-0:top");
@@ -463,9 +482,7 @@ describe("retry", () => {
 
   it("retryPair retries only that pair's failures", async () => {
     await runWithFailures(["pair-0:top", "pair-0:sole", "pair-1:left"]);
-    vi.mocked(retryCaptureImage).mockRejectedValue({
-      response: { status: 400 },
-    });
+    vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);
 
     await retryPair("pair-0");
 
@@ -485,9 +502,7 @@ describe("retry", () => {
       "pair-1:right",
       "pair-1:label",
     ]);
-    vi.mocked(retryCaptureImage).mockRejectedValue({
-      response: { status: 400 },
-    });
+    vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);
     FakeXHR.maxInFlight = 0;
 
     await retryAllFailed();
