@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import EditPairModal from "../components/sneakers/EditPairModal";
+import ReplaceImagesModal from "../components/sneakers/ReplaceImagesModal";
 import { getSneaker } from "../lib/api";
 import type {
   CaptureImage,
@@ -177,6 +178,7 @@ export default function SneakerDetailsPage() {
   );
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [replacingImages, setReplacingImages] = useState(false);
 
   const loadSneaker = useCallback(
     async (isRefresh = false) => {
@@ -535,6 +537,20 @@ export default function SneakerDetailsPage() {
           }
         />
 
+        <ReplaceImagesModal
+          pair={replacingImages ? sneaker : null}
+          onClose={() => setReplacingImages(false)}
+          onReplaced={(count, finished) => {
+            // Refresh in place (no skeleton) so the gallery shows the swap.
+            getSneaker(sneaker.id).then(setSneaker, () => {});
+            if (finished) setReplacingImages(false);
+            setToast({
+              type: "success",
+              message: `${count} ${count === 1 ? "photo" : "photos"} replaced.`,
+            });
+          }}
+        />
+
         {/* Image gallery */}
         <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -555,8 +571,31 @@ export default function SneakerDetailsPage() {
                   ? "image"
                   : "images"}
               </span>
+
+              <button
+                type="button"
+                onClick={() => setReplacingImages(true)}
+                disabled={sneaker.status.toLowerCase() === "verified"}
+                title={
+                  sneaker.status.toLowerCase() === "verified"
+                    ? "Verified pairs can't have their photos changed"
+                    : undefined
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[16px]">
+                  photo_library
+                </span>
+                Replace photos
+              </button>
             </div>
           </div>
+
+          {sneaker.status.toLowerCase() === "verified" && (
+            <p className="mt-2 text-xs text-gray-500">
+              Photos are locked because this pair has been verified.
+            </p>
+          )}
 
           <div className="mt-5">
             {!selectedImage ? (
