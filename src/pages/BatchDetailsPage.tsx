@@ -26,6 +26,7 @@ import {
 
 import AddPairModal from "../components/AddPairModal";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
+import { useBulkUpload } from "../lib/bulk-upload-store";
 
 import type { SneakerPair } from "../lib/types";
 
@@ -915,6 +916,21 @@ export default function BatchDetailsPage() {
     brandFilter,
     ordering,
   ]);
+
+  /* Refresh pairs when a bulk upload into this batch finishes. Failures
+     are explained by the upload panel, so no toast here. */
+  useEffect(
+    () =>
+      useBulkUpload.subscribe((state, prev) => {
+        if (state.phase === prev.phase || state.batchId !== batchId) return;
+        if (state.phase !== "done" && state.phase !== "failed") return;
+
+        // Off page 1, the page change itself triggers the fetch above.
+        if (page === 1) loadBatchDetails();
+        else setPage(1);
+      }),
+    [batchId, page, loadBatchDetails],
+  );
 
   /* Populate edit form */
   useEffect(() => {
