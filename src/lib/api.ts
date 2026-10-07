@@ -74,6 +74,16 @@ async function refreshSession(): Promise<boolean> {
   }
 }
 
+/* One refresh request at a time, shared by everything waiting on it. */
+async function refreshOnce(): Promise<boolean> {
+  refreshPromise = refreshPromise ?? refreshSession();
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
 /**
  * Codes that mean "the access token is no longer usable, try
  * a refresh before giving up." Anything else (e.g. wrong
@@ -110,11 +120,7 @@ api.interceptors.response.use(
     ) {
       original._retry = true;
 
-      refreshPromise = refreshPromise ?? refreshSession();
-      const refreshed = await refreshPromise;
-      refreshPromise = null;
-
-      if (refreshed) {
+      if (await refreshOnce()) {
         return api(original);
       }
 
@@ -161,6 +167,25 @@ export async function getMe(): Promise<AuthUser> {
   const response = await api.get<any>("/auth/me/");
   const body = response?.data ?? {};
   return (body?.data ?? body) as AuthUser;
+}
+
+/**
+ * Who is logged in, used on page load. The access cookie only lives
+ * 15 minutes, so a 401 here usually means "expired", not "logged out":
+ * refresh once with the 7-day refresh cookie and ask again. Rejects
+ * only when there is no usable session.
+ */
+export async function restoreSession(): Promise<AuthUser> {
+  try {
+    return await getMe();
+  } catch (error) {
+    const status = (error as { response?: { status?: number } })?.response
+      ?.status;
+    if (status === 401 && (await refreshOnce())) {
+      return getMe();
+    }
+    throw error;
+  }
 }
 
 /* ============================================================
