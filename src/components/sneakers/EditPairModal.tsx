@@ -8,11 +8,16 @@ import type { SneakerPair } from "../../lib/types";
 
 type Field = keyof SneakerPairEdit;
 
-const TEXT_FIELDS: Array<{ field: Exclude<Field, "condition">; label: string }> = [
-  { field: "brand", label: "Brand" },
-  { field: "model", label: "Model" },
-  { field: "sku", label: "SKU" },
-  { field: "size", label: "Size" },
+const TEXT_FIELDS: Array<{
+  field: Exclude<Field, "condition">;
+  label: string;
+  maxLength: number;
+}> = [
+  { field: "brand", label: "Brand", maxLength: METADATA_MAX_LENGTH.brand },
+  { field: "model", label: "Model", maxLength: METADATA_MAX_LENGTH.model },
+  { field: "sku", label: "SKU", maxLength: METADATA_MAX_LENGTH.sku },
+  { field: "size", label: "Size", maxLength: METADATA_MAX_LENGTH.size },
+  { field: "colorway", label: "Colorway", maxLength: 255 },
 ];
 
 type ApiError = ApiFormError<Field>;
@@ -23,6 +28,7 @@ function initialValues(pair: SneakerPair): Required<SneakerPairEdit> {
     model: pair.model ?? "",
     sku: pair.sku ?? "",
     size: pair.size ?? "",
+    colorway: pair.colorway ?? "",
     condition: pair.condition || DEFAULT_CONDITION,
   };
 }
@@ -102,7 +108,7 @@ function EditPairForm({
         </div>
 
         <div className="grid gap-4 px-6 py-5 sm:grid-cols-2">
-          {TEXT_FIELDS.map(({ field, label }) => (
+          {TEXT_FIELDS.map(({ field, label, maxLength }) => (
             <label key={field} className="block">
               <span className="mb-1.5 block text-sm font-medium text-gray-700">
                 {label}
@@ -110,7 +116,7 @@ function EditPairForm({
               <input
                 type="text"
                 value={values[field]}
-                maxLength={METADATA_MAX_LENGTH[field]}
+                maxLength={maxLength}
                 onChange={(event) =>
                   setValues({ ...values, [field]: event.target.value })
                 }

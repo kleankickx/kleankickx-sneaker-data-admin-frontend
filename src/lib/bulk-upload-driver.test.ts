@@ -31,7 +31,7 @@ vi.mock("./api", () => ({
   retryCaptureImage: vi.fn(),
 }));
 
-const ANGLES = ["overview", "top", "left", "right", "sole", "label"];
+const ANGLES = ["front", "top", "lateral", "medial", "sole", "label"];
 
 /* ------------------------------------------------------------------
    Fake XMLHttpRequest
@@ -292,12 +292,12 @@ describe("runBulkUpload", () => {
 
   it("fails an item whose slot is missing from the response", async () => {
     vi.mocked(createPairsBulk).mockImplementation(
-      fakeCreate(["pair-0:left"]),
+      fakeCreate(["pair-0:lateral"]),
     );
 
     await runBulkUpload(makeInput(1));
 
-    expect(item("pair-0:left")).toMatchObject({
+    expect(item("pair-0:lateral")).toMatchObject({
       status: "failed",
       error: "No upload slot returned.",
     });
@@ -481,7 +481,7 @@ describe("retry", () => {
   });
 
   it("retryPair retries only that pair's failures", async () => {
-    await runWithFailures(["pair-0:top", "pair-0:sole", "pair-1:left"]);
+    await runWithFailures(["pair-0:top", "pair-0:sole", "pair-1:lateral"]);
     vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);
 
     await retryPair("pair-0");
@@ -490,7 +490,7 @@ describe("retry", () => {
       "pair-0:top",
       "pair-0:sole",
     ]);
-    expect(item("pair-1:left").status).toBe("failed");
+    expect(item("pair-1:lateral").status).toBe("failed");
     expect(store().phase).toBe("failed");
   });
 
@@ -498,8 +498,8 @@ describe("retry", () => {
     await runWithFailures([
       "pair-0:top",
       "pair-0:sole",
-      "pair-1:left",
-      "pair-1:right",
+      "pair-1:lateral",
+      "pair-1:medial",
       "pair-1:label",
     ]);
     vi.mocked(retryCaptureImage).mockRejectedValue(NETWORK_ERROR);

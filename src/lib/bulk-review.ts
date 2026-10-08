@@ -52,7 +52,7 @@ export const METADATA_MAX_LENGTH = {
   brand: 100,
   model: 255,
   sku: 100,
-  size: 20,
+  size: 50,
 } as const;
 
 export type MetadataField = keyof typeof METADATA_MAX_LENGTH;

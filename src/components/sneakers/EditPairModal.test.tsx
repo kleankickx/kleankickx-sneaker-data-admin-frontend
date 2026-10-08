@@ -24,7 +24,7 @@ const pair: SneakerPair = {
   model: "Air Max 90",
   sku: null,
   size: "42",
-  condition: "a",
+  condition: "like_new",
   status: "received",
   created_at: "2026-10-07T10:00:00Z",
   updated_at: "2026-10-07T10:00:00Z",
@@ -63,13 +63,13 @@ describe("EditPairModal", () => {
 
     expect(screen.getByLabelText("Brand")).toHaveValue("Nike");
     expect(screen.getByLabelText("SKU")).toHaveValue("");
-    expect(screen.getByLabelText("Condition")).toHaveValue("a");
-    expect(screen.getByLabelText("Size")).toHaveAttribute("maxLength", "20");
+    expect(screen.getByLabelText("Condition")).toHaveValue("like_new");
+    expect(screen.getByLabelText("Size")).toHaveAttribute("maxLength", "50");
     expect(save()).toBeDisabled();
   });
 
   it("sends only the changed, trimmed fields", async () => {
-    const updated = { ...pair, brand: "New Balance", condition: "b" };
+    const updated = { ...pair, brand: "New Balance", condition: "good" };
     vi.mocked(updateSneaker).mockResolvedValue(updated);
     const { onSaved } = renderModal();
 
@@ -77,14 +77,14 @@ describe("EditPairModal", () => {
       target: { value: "  New Balance " },
     });
     fireEvent.change(screen.getByLabelText("Condition"), {
-      target: { value: "b" },
+      target: { value: "good" },
     });
     fireEvent.click(save());
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
     expect(updateSneaker).toHaveBeenCalledWith("pair-uuid", {
       brand: "New Balance",
-      condition: "b",
+      condition: "good",
     });
   });
 

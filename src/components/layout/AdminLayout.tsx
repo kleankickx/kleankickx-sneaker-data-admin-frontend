@@ -24,6 +24,7 @@ const navigation: NavigationItem[] = [
     path: "/verification",
     icon: "fact_check",
   },
+  { name: "Review queue", path: "/review-queue", icon: "rule" },
 ];
 
 function MaterialIcon({

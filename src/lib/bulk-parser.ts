@@ -12,16 +12,9 @@
  *      with the angle removed.
  */
 
-export const REQUIRED_ANGLES = [
-  "overview",
-  "top",
-  "left",
-  "right",
-  "sole",
-  "label",
-] as const;
+import { LEGACY_SIDE_ANGLES, REQUIRED_ANGLES, type Angle } from "./angles";
 
-export type Angle = (typeof REQUIRED_ANGLES)[number];
+export { REQUIRED_ANGLES, type Angle };
 
 export interface ParsedFile {
   file: File;
@@ -50,19 +43,23 @@ export interface ParseResult {
    ============================================================ */
 
 /*
- * One angle word bounded by non-letters or string edges. "overview"
- * also accepts a separator in the middle ("over-view", "over_view").
+ * One angle word bounded by non-letters or string edges. "left" and
+ * "right" are older names for the lateral and medial sides of the left
+ * shoe. "overview" is not a bulk angle: such files stay unassigned.
  */
 const ANGLE_PATTERN =
-  /(?<![a-z])(overview|over[\s_-]view|top|left|right|sole|label)(?![a-z])/gi;
+  /(?<![a-z])(lateral|medial|front|label|top|sole|left|right)(?![a-z])/gi;
 
 const KKX_PAIR_PATTERN = /KKX-PAIR-\d+/i;
 
 /* "pair" not preceded by a letter, so "repair-5" is not pair-5. */
 const PAIR_NUMBER_PATTERN = /(?<![a-z])pair[\s_-]*(\d+)/i;
 
-/* A folder holding at most this many files is treated as one pair. */
-const MAX_FILES_PER_PAIR_FOLDER = REQUIRED_ANGLES.length;
+/*
+ * A folder holding at most this many files is treated as one pair: the
+ * six angles plus room for an extra overview photo.
+ */
+const MAX_FILES_PER_PAIR_FOLDER = REQUIRED_ANGLES.length + 1;
 
 /* OS metadata files that show up in folder drops and are never images. */
 const IGNORED_FILENAMES = new Set(["thumbs.db", "desktop.ini"]);
@@ -89,7 +86,7 @@ function stem(name: string): string {
 
 function normalizeAngle(match: string): Angle {
   const lower = match.toLowerCase();
-  return (lower.startsWith("over") ? "overview" : lower) as Angle;
+  return LEGACY_SIDE_ANGLES[lower] ?? (lower as Angle);
 }
 
 export function isIgnoredFile(name: string): boolean {

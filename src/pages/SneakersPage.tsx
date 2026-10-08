@@ -8,6 +8,7 @@ import {
   type SneakersMeta,
   type PairsWithoutImagesPreview,
 } from "../lib/api";
+import { CONDITION_OPTIONS, conditionLabel } from "../lib/conditions";
 
 const PAGE_SIZE = 25;
 
@@ -79,16 +80,17 @@ function statusTone(status: string | null | undefined) {
 
 function conditionTone(condition: string | null | undefined) {
   switch (condition?.toLowerCase()) {
-    case "a":
+    case "new":
+    case "like_new":
       return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
 
-    case "b":
+    case "good":
       return "bg-sky-50 text-sky-700 ring-sky-600/20";
 
-    case "c":
+    case "fair":
       return "bg-amber-50 text-amber-700 ring-amber-600/20";
 
-    case "d":
+    case "poor":
       return "bg-rose-50 text-rose-700 ring-rose-600/20";
 
     default:
@@ -920,11 +922,11 @@ export default function SneakersPage() {
                   className="h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-700 outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-200 sm:w-44"
                 >
                   <option value="">All conditions</option>
-                  <option value="a">Grade A</option>
-                  <option value="b">Grade B</option>
-                  <option value="c">Grade C</option>
-                  <option value="d">Grade D</option>
-                  <option value="unknown">Unknown</option>
+                  {CONDITION_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
 
                 <select
@@ -1205,11 +1207,11 @@ export default function SneakersPage() {
                         <td className="px-6 py-4">
                           {sneaker.condition ? (
                             <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium capitalize ring-1 ring-inset ${conditionTone(
+                              className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset ${conditionTone(
                                 sneaker.condition,
                               )}`}
                             >
-                              {sneaker.condition.toUpperCase()}
+                              {conditionLabel(sneaker.condition)}
                             </span>
                           ) : (
                             <span className="text-sm text-gray-400">

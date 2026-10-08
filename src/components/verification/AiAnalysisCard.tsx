@@ -1,13 +1,9 @@
 import type { ReactNode } from "react";
 
-import { formatConfidence, type AiAnalysis } from "../../lib/verification";
+import type { AnalysisResult } from "../../lib/types";
+import { percent, type AiAnalysis } from "../../lib/verification";
 
-const SUGGESTED_FIELDS = [
-  { field: "brand", label: "Brand" },
-  { field: "model", label: "Model" },
-  { field: "sku", label: "SKU" },
-  { field: "size", label: "Size" },
-] as const;
+type Candidate = AnalysisResult["candidate_matches"][number];
 
 function formatDateTime(value: string) {
   const date = new Date(value);
@@ -54,24 +50,74 @@ function StateMessage({
   );
 }
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="mt-4">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-gray-400">
+        {title}
+      </h3>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Candidates({
+  candidates,
+  onApply,
+  disabled,
+}: {
+  candidates: Candidate[];
+  onApply?: (candidate: Candidate) => void;
+  disabled: boolean;
+}) {
+  return (
+    <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+      {candidates.map((c, index) => (
+        <li key={`${c.sku}-${index}`} className="flex items-start gap-3 px-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-gray-900">
+              {[c.brand, c.model].filter(Boolean).join(" ") || "Unknown model"}
+              {c.sku && (
+                <span className="ml-1.5 font-mono text-xs text-gray-500">{c.sku}</span>
+              )}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              {percent(c.confidence)} · {c.reason}
+            </p>
+          </div>
+          {onApply && !disabled && (
+            <button
+              type="button"
+              onClick={() => onApply(c)}
+              className="shrink-0 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Use
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Body({
   analysis,
   onRetry,
+  onApplyCandidate,
+  readOnly,
 }: {
   analysis: AiAnalysis;
   onRetry: () => void;
+  onApplyCandidate?: (candidate: Candidate) => void;
+  readOnly: boolean;
 }) {
   switch (analysis.kind) {
     case "loading":
       return (
         <div className="animate-pulse space-y-3" aria-label="Loading AI analysis">
           <div className="h-4 w-40 rounded bg-gray-200" />
-          <div className="h-2 w-full rounded bg-gray-200" />
-          <div className="grid grid-cols-2 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-10 rounded bg-gray-200" />
-            ))}
-          </div>
+          <div className="h-12 w-full rounded bg-gray-200" />
+          <div className="h-16 w-full rounded bg-gray-200" />
         </div>
       );
 
@@ -134,65 +180,67 @@ function Body({
       );
 
     case "ready": {
-      const { identification } = analysis;
-      const confidence = formatConfidence(identification.confidence);
-      const percent = confidence ? Number.parseInt(confidence, 10) : null;
-      const generated = formatDateTime(identification.created_at);
+      const { result, run } = analysis.suggestion;
+      const generated = run ? formatDateTime(run.created_at) : null;
 
       return (
         <div>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium text-gray-700">
-              Overall confidence
+          {result.overall_assessment && (
+            <p className="text-sm text-gray-700">{result.overall_assessment}</p>
+          )}
+
+          {run && !run.vlm_used && (
+            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              The vision model didn't contribute to this run, so only the label
+              and catalog were used. Condition and materials weren't assessed.
             </p>
-            <p className="text-sm font-semibold text-gray-900">
-              {confidence ?? "Not reported"}
-            </p>
-          </div>
-          {percent !== null && (
-            <div
-              className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100"
-              role="meter"
-              aria-label="AI confidence"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div
-                className={`h-full rounded-full ${
-                  percent < 60 ? "bg-amber-400" : "bg-gray-700"
-                }`}
-                style={{ width: `${percent}%` }}
+          )}
+
+          {result.candidate_matches.length > 0 && (
+            <Section title="Candidate matches">
+              <Candidates
+                candidates={result.candidate_matches}
+                onApply={onApplyCandidate}
+                disabled={readOnly}
               />
-            </div>
-          )}
-          {percent !== null && percent < 60 && (
-            <p className="mt-1.5 text-xs text-amber-700">
-              Low confidence. Check each value carefully.
-            </p>
+            </Section>
           )}
 
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-            {SUGGESTED_FIELDS.map(({ field, label }) => (
-              <div key={field} className="min-w-0">
-                <dt className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                  {label}
-                </dt>
-                <dd className="mt-0.5 truncate text-sm font-medium text-gray-900">
-                  {identification[field] || (
-                    <span className="font-normal text-gray-400">
-                      No suggestion
-                    </span>
-                  )}
-                </dd>
-              </div>
-            ))}
-          </dl>
+          {result.visible_text.length > 0 && (
+            <Section title="Visible text">
+              <ul className="flex flex-wrap gap-1.5">
+                {result.visible_text.map((text) => (
+                  <li
+                    key={text}
+                    className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700"
+                  >
+                    {text}
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
 
-          <p className="mt-4 text-xs text-gray-500">
-            Confidence applies to the whole suggestion. Condition is not
-            assessed by AI.
-            {generated && ` Generated ${generated}.`}
+          {result.limitations.length > 0 && (
+            <Section title="Limitations">
+              <ul className="list-disc space-y-0.5 pl-4 text-xs text-gray-600">
+                {result.limitations.map((limitation) => (
+                  <li key={limitation}>{limitation}</li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          <p className="mt-4 text-xs text-gray-400">
+            {run
+              ? [
+                  run.model_name || "No vision model",
+                  `prompt ${run.prompt_version}`,
+                  generated && `generated ${generated}`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Earlier AI identification"}
           </p>
         </div>
       );
@@ -201,22 +249,31 @@ function Body({
 }
 
 /**
- * The pair's latest AI identification, shown as a suggestion. Nothing
- * here requests analysis; it only reads what the backend has stored.
+ * The pair's latest AI analysis, shown as a suggestion. Nothing here
+ * requests analysis; it only reads what the backend has stored.
+ * Per-field values and confidence sit beside each field in the
+ * verification panel.
  */
 export default function AiAnalysisCard({
   analysis,
   onRetry,
+  onApplyCandidate,
+  readOnly = false,
 }: {
   analysis: AiAnalysis;
   onRetry: () => void;
+  onApplyCandidate?: (candidate: Candidate) => void;
+  readOnly?: boolean;
 }) {
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-50">
-            <span aria-hidden="true" className="material-symbols-outlined text-[18px] text-gray-600">
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined text-[18px] text-gray-600"
+            >
               auto_awesome
             </span>
           </div>
@@ -230,7 +287,12 @@ export default function AiAnalysisCard({
       </div>
 
       <div className="mt-4">
-        <Body analysis={analysis} onRetry={onRetry} />
+        <Body
+          analysis={analysis}
+          onRetry={onRetry}
+          onApplyCandidate={onApplyCandidate}
+          readOnly={readOnly}
+        />
       </div>
     </section>
   );
