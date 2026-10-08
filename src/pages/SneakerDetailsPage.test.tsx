@@ -55,7 +55,7 @@ const pair: SneakerPair = {
     {
       id: "session",
       is_ready: false,
-      images: [image("front"), image("sole"), image("overview")],
+      images: [image("overview"), image("sole")],
       created_at: "2026-10-07T10:00:00Z",
       updated_at: "2026-10-07T10:00:00Z",
     },
@@ -138,7 +138,7 @@ describe("SneakerDetailsPage", () => {
       await screen.findByText("2 of 6 angles captured"),
     ).toBeInTheDocument();
     expect(
-      screen.getByAltText("Front view of KKX-PAIR-00000006"),
+      screen.getByAltText("Overview view of KKX-PAIR-00000006"),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Sole" }));
@@ -146,14 +146,8 @@ describe("SneakerDetailsPage", () => {
       screen.getByAltText("Sole view of KKX-PAIR-00000006"),
     ).toBeInTheDocument();
 
-    // Overview is an extra view, after the six.
-    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
-    expect(
-      screen.getByAltText("Overview view of KKX-PAIR-00000006"),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Lateral side (missing)" }));
-    expect(screen.getByText("No lateral side photo")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Left side (missing)" }));
+    expect(screen.getByText("No left side photo")).toBeInTheDocument();
   });
 
   it("shows a friendly error with retry and back when the pair can't load", async () => {

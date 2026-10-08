@@ -6,12 +6,7 @@ import {
   startImageReplacement,
   type UploadConfig,
 } from "../../lib/api";
-import {
-  ANGLE_LABELS,
-  LEGACY_SIDE_ANGLES,
-  REPLACEABLE_ANGLES,
-  type ReplaceableAngle as Angle,
-} from "../../lib/angles";
+import { REQUIRED_ANGLES, type Angle } from "../../lib/bulk-parser";
 import { imageRulesFromConfig } from "../../lib/bulk-review";
 import { uploadToSlot } from "../../lib/direct-upload";
 import {
@@ -49,8 +44,7 @@ function currentImages(pair: SneakerPair): Partial<Record<Angle, CaptureImage>> 
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
   for (const image of images) {
-    // Older captures stored the lateral/medial sides as left/right.
-    byAngle[(LEGACY_SIDE_ANGLES[image.angle] ?? image.angle) as Angle] = image;
+    byAngle[image.angle as Angle] = image;
   }
   return byAngle;
 }
@@ -123,7 +117,7 @@ function ReplaceImagesContent({
 
   const rules = imageRulesFromConfig(config);
   const current = currentImages(pair);
-  const picked = REPLACEABLE_ANGLES.filter((angle) => picks[angle]);
+  const picked = REQUIRED_ANGLES.filter((angle) => picks[angle]);
   const hasFailures = Object.values(statuses).some((s) => s?.state === "failed");
 
   function setStatus(angle: Angle, status: AngleStatus) {
@@ -302,7 +296,7 @@ function ReplaceImagesContent({
               </p>
 
               <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {REPLACEABLE_ANGLES.map((angle) => {
+                {REQUIRED_ANGLES.map((angle) => {
                   const file = picks[angle];
                   const image = current[angle];
                   const status = statuses[angle];
@@ -339,7 +333,7 @@ function ReplaceImagesContent({
                       <div className="space-y-1.5 p-2">
                         <div className="flex items-center justify-between gap-1">
                           <span className="text-xs font-medium text-gray-800">
-                            {ANGLE_LABELS[angle]}
+                            {angle}
                           </span>
                           {file && !busy ? (
                             <button

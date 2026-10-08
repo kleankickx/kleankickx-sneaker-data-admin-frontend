@@ -110,7 +110,7 @@ describe("BulkUploadModal", () => {
 
   it("flags a pair with five files and disables Start", () => {
     renderModal();
-    chooseFiles(pairFiles("pair-1", REQUIRED_ANGLES.filter((angle) => angle !== "label")));
+    chooseFiles(pairFiles("pair-1", REQUIRED_ANGLES.slice(0, 5)));
 
     expect(screen.getByText("Missing angles: label")).toBeInTheDocument();
     expect(
@@ -136,7 +136,7 @@ describe("BulkUploadModal", () => {
   it("assigns an unassigned file to a pair's empty slot", () => {
     renderModal();
     chooseFiles([
-      ...pairFiles("pair-1", REQUIRED_ANGLES.filter((angle) => angle !== "label")),
+      ...pairFiles("pair-1", REQUIRED_ANGLES.slice(0, 5)),
       file("IMG_4823.HEIC"),
     ]);
 
@@ -196,7 +196,7 @@ describe("BulkUploadModal", () => {
     }
     expect(input.pairs[1].uploads[0]).toMatchObject({
       content_type: "image/heic",
-      original_filename: "pair-2-lateral.HEIC",
+      original_filename: "pair-2-overview.HEIC",
     });
     expect(input.files["pair-0"]?.top?.name).toBe("pair-1-top.jpg");
     expect(input.files["pair-1"]?.top?.name).toBe("pair-2-top.HEIC");
@@ -224,11 +224,11 @@ describe("BulkUploadModal", () => {
     renderModal();
     chooseFiles([
       ...pairFiles("pair-1", REQUIRED_ANGLES.slice(1)),
-      file("pair-1-lateral.jpg", 200),
+      file("pair-1-overview.jpg", 200),
     ]);
 
     expect(
-      await screen.findByText("lateral is 200 B — max is 100 B"),
+      await screen.findByText("overview is 200 B — max is 100 B"),
     ).toBeInTheDocument();
     expect(startButton()).toBeDisabled();
   });
@@ -327,7 +327,7 @@ describe("BulkUploadModal", () => {
 
   it("rejects an unsupported file picked for a tile", () => {
     const { container } = renderModal();
-    chooseFiles(pairFiles("pair-1", REQUIRED_ANGLES.filter((angle) => angle !== "label")));
+    chooseFiles(pairFiles("pair-1", REQUIRED_ANGLES.slice(0, 5)));
 
     fireEvent.click(screen.getByRole("button", { name: "Add label" }));
     const tileInput = container.querySelector(

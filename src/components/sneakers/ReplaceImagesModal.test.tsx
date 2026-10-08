@@ -27,7 +27,7 @@ vi.mock("../../lib/api", () => ({
 }));
 vi.mock("../../lib/direct-upload", () => ({ uploadToSlot: vi.fn() }));
 
-const ANGLES = ["front", "top", "lateral", "medial", "sole", "label"];
+const ANGLES = ["overview", "top", "left", "right", "sole", "label"];
 
 function image(angle: string): CaptureImage {
   return {

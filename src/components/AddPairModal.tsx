@@ -11,18 +11,39 @@ import {
   createPairInBatch,
   type PairUploadSlot,
 } from "../lib/api";
-import {
-  ANGLE_HINTS,
-  ANGLE_LABELS,
-  REQUIRED_ANGLES,
-  type Angle,
-} from "../lib/angles";
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/* The six spec views of the LEFT shoe; see lib/angles. */
+const REQUIRED_ANGLES = [
+  "overview",
+  "top",
+  "left",
+  "right",
+  "sole",
+  "label",
+] as const;
+
+type Angle = (typeof REQUIRED_ANGLES)[number];
+
+const ANGLE_LABELS: Record<Angle, string> = {
+  overview: "Overview",
+  top: "Top",
+  left: "Left side",
+  right: "Right side",
+  sole: "Sole",
+  label: "Label / tag",
+};
+
+const ANGLE_HINTS: Record<Angle, string> = {
+  overview: "Whole shoe, 3/4 angle",
+  top: "Looking straight down",
+  left: "Left profile",
+  right: "Right profile",
+  sole: "Outsole tread pattern",
+  label: "Size tag or SKU label",
+};
 
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */

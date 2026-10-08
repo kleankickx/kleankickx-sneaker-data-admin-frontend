@@ -79,32 +79,20 @@ function job(overrides: Partial<AIIdentificationJob>): AIIdentificationJob {
 const settled = { loading: false, error: false };
 
 describe("angleSlots", () => {
-  it("gives every spec angle a slot, in order, with gaps for missing ones", () => {
-    const slots = angleSlots(pairWith([image("sole"), image("front")]));
+  it("gives every required angle a slot, in order, with gaps for missing ones", () => {
+    const slots = angleSlots(pairWith([image("sole"), image("overview")]));
 
     expect(slots.map((s) => s.angle)).toEqual([
-      "lateral",
-      "medial",
-      "front",
-      "label",
+      "overview",
+      "left",
+      "right",
       "top",
       "sole",
+      "label",
     ]);
-    expect(slots[2].image?.id).toBe("front-id");
-    expect(slots[0].image).toBeNull();
-    expect(slots[5].image?.id).toBe("sole-id");
-  });
-
-  it("fills the side slots from legacy left/right photos; overview is extra", () => {
-    const slots = angleSlots(
-      pairWith([image("left"), image("right"), image("overview")]),
-    );
-
-    expect(slots[0]).toMatchObject({ angle: "lateral", label: "Lateral side" });
-    expect(slots[0].image?.id).toBe("left-id");
-    expect(slots[1].image?.id).toBe("right-id");
-    expect(slots).toHaveLength(7);
-    expect(slots[6]).toMatchObject({ angle: "overview", label: "Overview" });
+    expect(slots[0].image?.id).toBe("overview-id");
+    expect(slots[1].image).toBeNull();
+    expect(slots[4].image?.id).toBe("sole-id");
   });
 
   it("ignores images that never finished uploading", () => {

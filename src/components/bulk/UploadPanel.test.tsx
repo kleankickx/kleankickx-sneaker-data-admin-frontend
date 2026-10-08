@@ -31,7 +31,7 @@ vi.mock("../../lib/bulk-upload-driver", () => ({
   retryPair: vi.fn(async () => {}),
 }));
 
-const ANGLES = ["front", "top", "lateral", "medial", "sole", "label"];
+const ANGLES = ["overview", "top", "left", "right", "sole", "label"];
 
 function pairItems(
   pairId: string,
@@ -120,7 +120,7 @@ describe("UploadPanel", () => {
     setJob(
       "uploading",
       pairItems("pair-0", "pair-0", (angle) =>
-        angle === "front"
+        angle === "overview"
           ? { status: "uploading", progress: 60 }
           : { status: "queued" },
       ),
