@@ -1,26 +1,7 @@
 import { useState, type ReactNode } from "react";
 
-import { REQUIRED_ANGLES, type Angle } from "../../lib/bulk-parser";
+import { ANGLE_HINTS, ANGLE_LABELS, REQUIRED_ANGLES } from "../../lib/angles";
 import { formatFileSize } from "../../lib/image-types";
-
-/* Same wording as the single-pair Add pair modal. */
-const ANGLE_LABELS: Record<Angle, string> = {
-  overview: "Overview",
-  top: "Top",
-  left: "Left side",
-  right: "Right side",
-  sole: "Sole",
-  label: "Label / tag",
-};
-
-const ANGLE_HINTS: Record<Angle, string> = {
-  overview: "Whole shoe, 3/4 angle",
-  top: "Looking straight down",
-  left: "Left profile",
-  right: "Right profile",
-  sole: "Outsole tread pattern",
-  label: "Size tag or SKU label",
-};
 
 function Icon({ name, className = "" }: { name: string; className?: string }) {
   return (
@@ -67,14 +48,14 @@ function FolderTree() {
     <pre className="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-[12px] leading-5 text-gray-800">
 {`intake-2026-10-07/        ← drop this folder
 ├── pair-001/             ← one folder per pair
-│   ├── overview.jpg
+│   ├── lateral.jpg        ← all of the LEFT shoe
+│   ├── medial.jpg
+│   ├── front.jpg
+│   ├── label.jpg
 │   ├── top.jpg
-│   ├── left.jpg
-│   ├── right.jpg
-│   ├── sole.jpg
-│   └── label.jpg
+│   └── sole.jpg
 ├── pair-002/
-│   ├── overview.heic
+│   ├── lateral.heic
 │   └── … (all six angles)
 └── pair-003/
     └── …`}
@@ -84,9 +65,10 @@ function FolderTree() {
 
 const NAME_EXAMPLES: Array<[string, string, string]> = [
   ["pair-2-top.jpg", "pair-2", "top"],
-  ["Pair_003_LEFT.HEIC", "pair-3", "left"],
+  ["Pair_003_LATERAL.HEIC", "pair-3", "lateral"],
+  ["pair-4-left.jpg", "pair-4", "lateral (older name)"],
   ["KKX-PAIR-00000042-sole.jpg", "KKX-PAIR-00000042", "sole"],
-  ["img-4823-overview.JPG", "img-4823", "overview"],
+  ["img-4823-front.JPG", "img-4823", "front"],
   ["IMG_4823.HEIC", "—", "—  (assign by hand)"],
 ];
 
@@ -202,11 +184,11 @@ function steps(maxFileSize: number | null): Array<{
               <Code>_</Code> or spaces can separate the parts.
             </Rule>
             <Rule ok={false}>
-              The angle must be its own word: <Code>myoverview.jpg</Code> is
-              not recognised; <Code>my-overview.jpg</Code> is.
+              The angle must be its own word: <Code>myfront.jpg</Code> is
+              not recognised; <Code>my-front.jpg</Code> is.
             </Rule>
             <Rule ok={false}>
-              A name with two angles (<Code>top-left.jpg</Code>) is ambiguous;
+              A name with two angles (<Code>top-sole.jpg</Code>) is ambiguous;
               you'll pick the angle yourself.
             </Rule>
           </ul>

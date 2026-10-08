@@ -23,6 +23,7 @@ import {
   type BatchDetailsResponse,
   type PairsWithoutImagesPreview,
 } from "../lib/api";
+import { conditionLabel } from "../lib/conditions";
 
 import AddPairModal from "../components/AddPairModal";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
@@ -1795,7 +1796,7 @@ export default function BatchDetailsPage() {
 
                 {conditions.map((condition) => (
                   <option key={condition} value={condition}>
-                    {condition}
+                    {conditionLabel(condition)}
                   </option>
                 ))}
               </select>
@@ -2019,7 +2020,7 @@ export default function BatchDetailsPage() {
                           <td className="px-4 py-4">
                             {pair.condition ? (
                               <span className="rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-                                {pair.condition}
+                                {conditionLabel(pair.condition)}
                               </span>
                             ) : (
                               <span className="text-sm text-gray-400">

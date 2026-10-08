@@ -9,6 +9,7 @@ import BatchDetailsPage from "../pages/BatchDetailsPage";
 import SneakersPage from "../pages/SneakersPage";
 import SneakerDetailsPage from "../pages/SneakerDetailsPage";
 import VerificationPage from "../pages/VerificationPage";
+import ReviewQueuePage from "../pages/ReviewQueuePage";
 import LoginPage from "../pages/LoginPage";
 
 export const router = createBrowserRouter([
@@ -54,6 +55,10 @@ export const router = createBrowserRouter([
       {
         path: "verification",
         element: <VerificationPage />,
+      },
+      {
+        path: "review-queue",
+        element: <ReviewQueuePage />,
       },
     ],
   },

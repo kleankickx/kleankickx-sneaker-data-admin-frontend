@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import type {
   AIIdentificationJob,
+  AnalysisRun,
   CaptureImage,
   SneakerPair,
   VerificationEligibility,
 } from "./types";
 import {
+  type AiAnalysis,
   aiAnalysisFrom,
   angleSlots,
   formatConfidence,
@@ -77,20 +79,32 @@ function job(overrides: Partial<AIIdentificationJob>): AIIdentificationJob {
 const settled = { loading: false, error: false };
 
 describe("angleSlots", () => {
-  it("gives every required angle a slot, in order, with gaps for missing ones", () => {
-    const slots = angleSlots(pairWith([image("sole"), image("overview")]));
+  it("gives every spec angle a slot, in order, with gaps for missing ones", () => {
+    const slots = angleSlots(pairWith([image("sole"), image("front")]));
 
     expect(slots.map((s) => s.angle)).toEqual([
-      "overview",
-      "left",
-      "right",
+      "lateral",
+      "medial",
+      "front",
+      "label",
       "top",
       "sole",
-      "label",
     ]);
-    expect(slots[0].image?.id).toBe("overview-id");
-    expect(slots[1].image).toBeNull();
-    expect(slots[4].image?.id).toBe("sole-id");
+    expect(slots[2].image?.id).toBe("front-id");
+    expect(slots[0].image).toBeNull();
+    expect(slots[5].image?.id).toBe("sole-id");
+  });
+
+  it("fills the side slots from legacy left/right photos; overview is extra", () => {
+    const slots = angleSlots(
+      pairWith([image("left"), image("right"), image("overview")]),
+    );
+
+    expect(slots[0]).toMatchObject({ angle: "lateral", label: "Lateral side" });
+    expect(slots[0].image?.id).toBe("left-id");
+    expect(slots[1].image?.id).toBe("right-id");
+    expect(slots).toHaveLength(7);
+    expect(slots[6]).toMatchObject({ angle: "overview", label: "Overview" });
   });
 
   it("ignores images that never finished uploading", () => {
@@ -135,52 +149,105 @@ describe("formatConfidence", () => {
 });
 
 describe("aiAnalysisFrom", () => {
+  const identification = {
+    id: "ident",
+    sneaker_pair: "pair-uuid",
+    brand: "Nike",
+    model: "Air Max 90",
+    sku: "",
+    size: "",
+    source: "ai",
+    confidence: "0.8700",
+    created_at: "2026-10-07T10:00:00Z",
+    updated_at: "2026-10-07T10:00:00Z",
+  };
+
+  const field = (value: string | null, confidence = 0.9) => ({
+    value,
+    confidence,
+    evidence: "seen",
+  });
+
+  const run: AnalysisRun = {
+    id: "run",
+    sneaker_pair: "pair-uuid",
+    sneaker_pair_id: "KKX-PAIR-00000042",
+    result: {
+      brand: field("Nike"),
+      model: field("Air Max 95"),
+      sku: field(null, 0),
+      size: field("US 10"),
+      colorway: field("white/black", 0.6),
+      condition: field("Good", 0.7),
+      materials: [],
+      visible_text: [],
+      candidate_matches: [],
+      overall_assessment: "",
+      limitations: [],
+    },
+    regions: [{ material_type: "suede", location: "overlays" }],
+    prompt_version: "fdc-v1",
+    provider: "openai",
+    model_name: "m",
+    vlm_used: true,
+    vlm_error: "",
+    duration_ms: 1,
+    created_at: "2026-10-07T10:00:00Z",
+  };
+
   it("reports loading and error before anything else", () => {
-    expect(aiAnalysisFrom(null, { loading: true, error: false }).kind).toBe(
+    expect(aiAnalysisFrom(null, run, { loading: true, error: false }).kind).toBe(
       "loading",
     );
-    expect(aiAnalysisFrom(null, { loading: false, error: true }).kind).toBe(
+    expect(aiAnalysisFrom(null, run, { loading: false, error: true }).kind).toBe(
       "error",
     );
   });
 
-  it("is not_requested when the pair has no AI job", () => {
-    expect(aiAnalysisFrom(null, settled)).toEqual({ kind: "not_requested" });
+  it("is not_requested when there is no job and no run", () => {
+    expect(aiAnalysisFrom(null, null, settled)).toEqual({ kind: "not_requested" });
   });
 
-  it("is pending while the job is queued or processing", () => {
-    expect(aiAnalysisFrom(job({ status: "processing" }), settled)).toEqual({
+  it("is pending while a newer analysis is queued or processing", () => {
+    expect(aiAnalysisFrom(job({ status: "processing" }), run, settled)).toEqual({
       kind: "pending",
       status: "processing",
     });
   });
 
+  it("shows the latest run, with its regions", () => {
+    const analysis = aiAnalysisFrom(job({ status: "completed" }), run, settled);
+
+    expect(analysis).toEqual({
+      kind: "ready",
+      suggestion: { result: run.result, regions: run.regions, run },
+    });
+  });
+
   it("is failed for a failed job, and no_result for an empty completed one", () => {
-    expect(aiAnalysisFrom(job({ status: "failed" }), settled).kind).toBe(
+    expect(aiAnalysisFrom(job({ status: "failed" }), null, settled).kind).toBe(
       "failed",
     );
-    expect(aiAnalysisFrom(job({ status: "completed" }), settled).kind).toBe(
+    expect(aiAnalysisFrom(job({ status: "completed" }), null, settled).kind).toBe(
       "no_result",
     );
   });
 
-  it("exposes the identification of a completed job", () => {
-    const identification = {
-      id: "ident",
-      sneaker_pair: "pair-uuid",
-      brand: "Nike",
-      model: "Air Max 90",
-      sku: "",
-      size: "",
-      source: "ai",
-      confidence: "0.8700",
-      created_at: "2026-10-07T10:00:00Z",
-      updated_at: "2026-10-07T10:00:00Z",
-    };
+  it("shows an earlier identification in the same shape", () => {
+    const analysis = aiAnalysisFrom(
+      job({ status: "completed", identification }),
+      null,
+      settled,
+    );
 
-    expect(
-      aiAnalysisFrom(job({ status: "completed", identification }), settled),
-    ).toEqual({ kind: "ready", identification });
+    expect(analysis.kind).toBe("ready");
+    const { result, run: none } = (
+      analysis as Extract<AiAnalysis, { kind: "ready" }>
+    ).suggestion;
+    expect(none).toBeNull();
+    expect(result.brand).toMatchObject({ value: "Nike", confidence: 0.87 });
+    expect(result.sku).toMatchObject({ value: null, confidence: 0 });
+    expect(result.condition.value).toBeNull();
   });
 });
 

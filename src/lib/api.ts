@@ -1,9 +1,12 @@
 import axios from "axios";
 import type {
   AIIdentificationJob,
+  AnalysisRun,
   ApiResponse,
   Batch,
   CaptureImage,
+  ReviewQueueNeighbors,
+  ReviewQueueRow,
   SneakerPair,
   VerificationEligibility,
 } from "./types";
@@ -701,6 +704,7 @@ export interface SneakerPairEdit {
   model?: string;
   sku?: string;
   size?: string;
+  colorway?: string;
   condition?: string;
 }
 
@@ -797,13 +801,25 @@ export async function completeImageReplacement(
    VERIFICATION
    ============================================================ */
 
-/* Matches SneakerVerificationSerializer; condition is required. */
+export interface VerifiedMaterial {
+  /* SneakerMaterial.MaterialType value. */
+  material_type: string;
+  /* Region of the shoe, e.g. "upper" or "outsole". */
+  location: string;
+}
+
+/*
+ * Matches SneakerVerificationSerializer. Condition must be one of the
+ * five grades; materials replace the pair's human-entered ones.
+ */
 export interface SneakerVerificationPayload {
   brand: string;
   model: string;
   sku: string;
   size: string;
+  colorway: string;
   condition: string;
+  materials: VerifiedMaterial[];
 }
 
 /** The pair's most recent AI identification job, or null if none. */
@@ -859,9 +875,9 @@ export async function startIdentification(
 }
 
 /* Matches SneakerIdentificationSerializer. */
-export type SneakerIdentificationPayload = Omit<
+export type SneakerIdentificationPayload = Pick<
   SneakerVerificationPayload,
-  "condition"
+  "brand" | "model" | "sku" | "size"
 >;
 
 /**
@@ -879,3 +895,56 @@ export async function identifySneaker(
 
   return response.data.data;
 }
+
+/* ============================================================
+   FOOTWEAR DATA CAPTURE ANALYSIS
+   ============================================================ */
+
+/** The pair's newest analysis run, or null if it has none. */
+export async function getLatestAnalysisRun(
+  sneakerId: string,
+): Promise<AnalysisRun | null> {
+  const response = await api.get<ApiResponse<AnalysisRun[]>>(
+    "/analysis-runs/",
+    {
+      params: {
+        sneaker_pair: sneakerId,
+        ordering: "-created_at",
+        page_size: 1,
+      },
+    },
+  );
+
+  return response.data.data[0] ?? null;
+}
+
+export interface ReviewQueueResponse {
+  results: ReviewQueueRow[];
+  meta: SneakersMeta;
+}
+
+/** Unverified pairs whose latest run has a key field below 0.8, oldest first. */
+export async function getReviewQueue(
+  page = 1,
+  pageSize = 25,
+): Promise<ReviewQueueResponse> {
+  const response = await api.get<
+    ApiResponse<ReviewQueueRow[]> & { meta: SneakersMeta }
+  >("/analysis-runs/review-queue/", {
+    params: { page, page_size: pageSize },
+  });
+
+  return { results: response.data.data, meta: response.data.meta };
+}
+
+export async function getReviewQueueNeighbors(
+  sneakerId: string,
+): Promise<ReviewQueueNeighbors> {
+  const response = await api.get<ApiResponse<ReviewQueueNeighbors>>(
+    "/analysis-runs/review-queue/neighbors/",
+    { params: { sneaker_pair: sneakerId } },
+  );
+
+  return response.data.data;
+}
+

@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -9,16 +10,22 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import AiAnalysisCard from "../components/verification/AiAnalysisCard";
 import ImageViewer from "../components/verification/ImageViewer";
-import VerificationPanel from "../components/verification/VerificationPanel";
+import VerificationPanel, {
+  type VerificationPanelHandle,
+} from "../components/verification/VerificationPanel";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import ReplaceImagesModal from "../components/sneakers/ReplaceImagesModal";
 import {
   getLatestAiJob,
+  getLatestAnalysisRun,
+  getReviewQueueNeighbors,
   getSneaker,
   getVerificationEligibility,
 } from "../lib/api";
 import type {
   AIIdentificationJob,
+  AnalysisRun,
+  ReviewQueueNeighbors,
   SneakerPair,
   VerificationEligibility,
 } from "../lib/types";
@@ -233,6 +240,7 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
   const [replacingImages, setReplacingImages] = useState(false);
 
   const [aiJob, setAiJob] = useState<AIIdentificationJob | null>(null);
+  const [aiRun, setAiRun] = useState<AnalysisRun | null>(null);
   const [aiLoading, setAiLoading] = useState(true);
   const [aiError, setAiError] = useState(false);
 
@@ -244,10 +252,11 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
   // flip the loading flags first (see refresh/retry below).
   const fetchAiJob = useCallback(
     () =>
-      getLatestAiJob(sneakerId)
+      Promise.all([getLatestAiJob(sneakerId), getLatestAnalysisRun(sneakerId)])
         .then(
-          (job) => {
+          ([job, run]) => {
             setAiJob(job);
+            setAiRun(run);
             setAiError(false);
           },
           () => setAiError(true),
@@ -292,6 +301,16 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
     [sneakerId],
   );
 
+  // Opened from the review queue: previous/next pair in that queue.
+  const fromQueue = new URLSearchParams(location.search).get("from") === "queue";
+  const [neighbors, setNeighbors] = useState<ReviewQueueNeighbors | null>(null);
+  useEffect(() => {
+    if (!fromQueue) return;
+    getReviewQueueNeighbors(sneakerId).then(setNeighbors, () => setNeighbors(null));
+  }, [fromQueue, sneakerId]);
+
+  const panel = useRef<VerificationPanelHandle>(null);
+
   // AI results and eligibility load on their own; a failure in either
   // never blocks the pair itself.
   useEffect(() => {
@@ -334,7 +353,7 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
     [sneaker],
   );
 
-  const analysis = aiAnalysisFrom(aiJob, {
+  const analysis = aiAnalysisFrom(aiJob, aiRun, {
     loading: aiLoading,
     error: aiError,
   });
@@ -427,6 +446,52 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
           </span>
           Back
         </button>
+
+        {fromQueue && neighbors && (
+          <nav
+            aria-label="Review queue"
+            className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm"
+          >
+            <Link
+              to="/review-queue"
+              className="font-medium text-gray-700 hover:text-gray-900"
+            >
+              Review queue
+              {neighbors.position !== null
+                ? ` · ${neighbors.position} of ${neighbors.total}`
+                : ` · ${neighbors.total} left`}
+            </Link>
+            <div className="flex gap-2">
+              {[
+                { id: neighbors.previous, label: "Previous", icon: "chevron_left" },
+                { id: neighbors.next, label: "Next", icon: "chevron_right" },
+              ].map(({ id, label, icon }) =>
+                id ? (
+                  <Link
+                    key={label}
+                    to={`/sneakers/${id}?from=queue`}
+                    className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1 font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    {label === "Previous" && (
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">{icon}</span>
+                    )}
+                    {label}
+                    {label === "Next" && (
+                      <span aria-hidden="true" className="material-symbols-outlined text-[18px]">{icon}</span>
+                    )}
+                  </Link>
+                ) : (
+                  <span
+                    key={label}
+                    className="rounded-lg border border-gray-100 px-2.5 py-1 text-gray-300"
+                  >
+                    {label}
+                  </span>
+                ),
+              )}
+            </div>
+          </nav>
+        )}
 
         <header className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
@@ -534,13 +599,18 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
             <AiAnalysisCard
               analysis={analysis}
               onRetry={reloadAiJob}
+              onApplyCandidate={(candidate) =>
+                panel.current?.applyCandidate(candidate)
+              }
+              readOnly={isVerified}
             />
 
             <VerificationPanel
               key={`${sneaker.id}:${sneaker.updated_at}`}
               pair={sneaker}
+              ref={panel}
               suggestion={
-                analysis.kind === "ready" ? analysis.identification : null
+                analysis.kind === "ready" ? analysis.suggestion : null
               }
               blockers={verificationBlockers(sneaker, eligibility)}
               checkingEligibility={eligibilityLoading}

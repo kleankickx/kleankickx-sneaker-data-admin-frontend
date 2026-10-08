@@ -136,7 +136,10 @@ describe("buildReviewState", () => {
 describe("editing", () => {
   function state(): ReviewState {
     return buildReviewState(
-      parse(...fullPair("pair-1").slice(0, 5), "IMG_9.HEIC"),
+      parse(
+        ...fullPair("pair-1").filter((path) => !path.includes("/label.")),
+        "IMG_9.HEIC",
+      ),
       idGen(),
     );
   }
@@ -202,9 +205,9 @@ describe("validation", () => {
 
   it("lists missing angles", () => {
     expect(
-      pairIssues(pairWith(["overview", "top", "left", "right"]), FALLBACK_RULES),
+      pairIssues(pairWith(["front", "top", "lateral", "medial"]), FALLBACK_RULES),
     ).toEqual([
-      "Missing angles: sole, label",
+      "Missing angles: label, sole",
     ]);
   });
 
@@ -213,7 +216,7 @@ describe("validation", () => {
 
     expect(pairIssues(pair, FALLBACK_RULES)).toEqual([]);
     expect(pairIssues(pair, withMax(100))).toContain(
-      "overview is 200 B — max is 100 B",
+      "front is 200 B — max is 100 B",
     );
     expect(pairIssues(pair, withMax(100))).toHaveLength(6);
   });
@@ -261,10 +264,10 @@ describe("buildRunInput", () => {
       ...REQUIRED_ANGLES,
     ]);
     expect(input.pairs[1].uploads[0]).toEqual({
-      angle: "overview",
+      angle: "lateral",
       file_size: 10,
       content_type: "image/heic",
-      original_filename: "overview.HEIC",
+      original_filename: "lateral.HEIC",
     });
     expect(Object.keys(input.files)).toEqual(["pair-0", "pair-1"]);
     expect(input.files["pair-1"]?.label?.name).toBe("label.HEIC");
