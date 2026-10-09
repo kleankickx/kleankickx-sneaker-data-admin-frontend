@@ -43,6 +43,7 @@ const overview: PipelineOverview = {
     vision_failed: 1,
     vision_failure_rate: 1 / 6,
     vision_disabled: 0,
+    test_runs: 2,
     oldest_queued_age_seconds: 3600,
     queue_stuck: true,
     recent_failures: [
@@ -246,6 +247,10 @@ describe("PipelineRunPage", () => {
       },
       raw_response: { brand: { value: "Nike" } },
       job_status: "completed",
+      status: "completed",
+      is_test: false,
+      notes: [],
+      stages: [],
       qc_ok: false, barcode_decoded: true, sku_source: "barcode",
       catalog_hit: true, size_found: true, size_consistent: false,
     } as PipelineRunDetail;
