@@ -3,11 +3,6 @@
  * reshapes what the backend returned; nothing is invented.
  */
 
-import {
-  ANGLE_LABELS,
-  LEGACY_SIDE_ANGLES,
-  REQUIRED_ANGLES,
-} from "./angles";
 import type {
   AIIdentificationJob,
   AnalysisResult,
@@ -19,13 +14,17 @@ import type {
 } from "./types";
 
 /*
- * CaptureSession.REQUIRED_ANGLES on the backend: the spec's six views of
- * the LEFT shoe.
+ * CaptureSession.REQUIRED_ANGLES on the backend, in the order a
+ * verifier walks around the shoe.
  */
-export const CAPTURE_ANGLES = REQUIRED_ANGLES.map((angle) => ({
-  angle,
-  label: ANGLE_LABELS[angle],
-}));
+export const CAPTURE_ANGLES = [
+  { angle: "overview", label: "Overview" },
+  { angle: "left", label: "Left side" },
+  { angle: "right", label: "Right side" },
+  { angle: "top", label: "Top" },
+  { angle: "sole", label: "Sole" },
+  { angle: "label", label: "Label" },
+] as const;
 
 export interface AngleSlot {
   angle: string;
@@ -35,8 +34,8 @@ export interface AngleSlot {
 }
 
 export function formatAngle(angle: string): string {
-  const known = ANGLE_LABELS[angle as keyof typeof ANGLE_LABELS];
-  if (known) return known;
+  const known = CAPTURE_ANGLES.find((slot) => slot.angle === angle);
+  if (known) return known.label;
   if (!angle) return "Unknown";
 
   return angle
@@ -44,16 +43,10 @@ export function formatAngle(angle: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-/* The spec angle a stored angle counts as (legacy left/right -> sides). */
-function specAngle(angle: string): string {
-  return LEGACY_SIDE_ANGLES[angle] ?? angle;
-}
-
 /**
  * One slot per required angle holding its newest uploaded image (a
  * replaced photo may briefly sit next to the old one), followed by any
- * uploaded images of other angles, such as overview. Photos stored under
- * the legacy names left/right fill the lateral/medial slots.
+ * uploaded images of other angles.
  */
 export function angleSlots(pair: SneakerPair): AngleSlot[] {
   const uploaded = (pair.capture_sessions ?? [])
@@ -64,15 +57,12 @@ export function angleSlots(pair: SneakerPair): AngleSlot[] {
   const slots: AngleSlot[] = CAPTURE_ANGLES.map(({ angle, label }) => ({
     angle,
     label,
-    image:
-      uploaded.find((image) => image.angle === angle) ??
-      uploaded.find((image) => specAngle(image.angle) === angle) ??
-      null,
+    image: uploaded.find((image) => image.angle === angle) ?? null,
   }));
 
   const required = new Set<string>(CAPTURE_ANGLES.map((s) => s.angle));
   const extras = uploaded
-    .filter((image) => !required.has(specAngle(image.angle)))
+    .filter((image) => !required.has(image.angle))
     .reverse()
     .map((image) => ({
       angle: image.angle,

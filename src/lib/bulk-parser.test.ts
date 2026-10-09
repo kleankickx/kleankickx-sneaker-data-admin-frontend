@@ -31,25 +31,20 @@ function summarize(result: ReturnType<typeof classifyFiles>) {
 
 describe("detectAngle", () => {
   it.each([
-    ["front.jpg", "front"],
+    ["overview.jpg", "overview"],
     ["Top.JPG", "top"],
-    ["lateral-side.jpg", "lateral"],
-    ["medial.webp", "medial"],
-    ["img-front-1.jpg", "front"],
-    ["myfrontfile.jpg", null],
+    ["left-side.jpg", "left"],
+    ["img-overview-1.jpg", "overview"],
+    ["myoverviewfile.jpg", null],
     ["sole.png", "sole"],
     ["label.jpeg", "label"],
+    ["right.webp", "right"],
     ["IMG_4823.HEIC", null],
-    ["FRONT.jpg", "front"],
-    ["frontal.jpg", null],
-    ["pair-2-top-sole.jpg", null],
-    ["pair-001/front.jpg", "front"],
-    // Older names for the sides of the left shoe.
-    ["left-side.jpg", "lateral"],
-    ["right.webp", "medial"],
-    ["pair-3-lateral-left.jpg", "lateral"],
-    // Overview is not a bulk angle.
-    ["overview.jpg", null],
+    ["OVERVIEW.jpg", "overview"],
+    ["over-view.jpg", "overview"],
+    ["overviewing.jpg", null],
+    ["pair-2-top-left.jpg", null],
+    ["pair-001/overview.jpg", "overview"],
   ])("%s -> %s", (name, expected) => {
     expect(detectAngle(name)).toBe(expected);
   });
@@ -57,15 +52,15 @@ describe("detectAngle", () => {
 
 describe("detectPairKeyFromName", () => {
   it.each([
-    ["KKX-PAIR-00000042-front.jpg", "front", "KKX-PAIR-00000042"],
+    ["KKX-PAIR-00000042-overview.jpg", "overview", "KKX-PAIR-00000042"],
     ["kkx-pair-42-top.jpg", "top", "KKX-PAIR-42"],
     ["pair-2-top.jpeg", "top", "pair-2"],
-    ["Pair_003_LEFT.HEIC", "lateral", "pair-3"],
-    ["img-4823-front.JPG", "front", "img-4823"],
+    ["Pair_003_LEFT.HEIC", "left", "pair-3"],
+    ["img-4823-overview.JPG", "overview", "img-4823"],
     ["IMG_4823.HEIC", null, null],
     ["pair-000-top.jpg", "top", "pair-0"],
     ["repair-5-top.jpg", "top", "repair-5"],
-    ["front.jpg", "front", null],
+    ["overview.jpg", "overview", null],
     ["shoe 12 sole.jpg", "sole", "shoe-12"],
   ] as const)("%s (%s) -> %s", (name, angle, expected) => {
     expect(detectPairKeyFromName(name, angle)).toBe(expected);
@@ -76,8 +71,8 @@ describe("classifyFiles", () => {
   it("groups files by folder", () => {
     const result = classifyFiles(
       inputs(
-        "pair-002/front.jpg",
-        "pair-001/front.jpg",
+        "pair-002/overview.jpg",
+        "pair-001/overview.jpg",
         "pair-001/top.jpg",
       ),
     );
@@ -86,21 +81,21 @@ describe("classifyFiles", () => {
       pairs: [
         {
           key: "pair-001",
-          paths: ["pair-001/front.jpg", "pair-001/top.jpg"],
+          paths: ["pair-001/overview.jpg", "pair-001/top.jpg"],
         },
-        { key: "pair-002", paths: ["pair-002/front.jpg"] },
+        { key: "pair-002", paths: ["pair-002/overview.jpg"] },
       ],
       unassigned: [],
     });
     expect(result.pairs[0].files.map((f) => f.angle)).toEqual([
-      "front",
+      "overview",
       "top",
     ]);
   });
 
   it("uses the full folder path as the key", () => {
     const result = classifyFiles(
-      inputs("intake-2026-10-04/pair-1/front.jpg"),
+      inputs("intake-2026-10-04/pair-1/overview.jpg"),
     );
 
     expect(result.pairs.map((p) => p.key)).toEqual([
@@ -111,8 +106,8 @@ describe("classifyFiles", () => {
   it("judges the innermost folder when nested", () => {
     const result = classifyFiles(
       inputs(
-        "intake-2026-10-04/pair-001/front.jpg",
-        "intake-2026-10-04/pair-002/front.jpg",
+        "intake-2026-10-04/pair-001/overview.jpg",
+        "intake-2026-10-04/pair-002/overview.jpg",
       ),
     );
 
@@ -139,7 +134,7 @@ describe("classifyFiles", () => {
   it("treats a folder of six angle-named files as one pair", () => {
     const result = classifyFiles(
       inputs(
-        ...["front", "top", "lateral", "medial", "sole", "label"].map(
+        ...["overview", "top", "left", "right", "sole", "label"].map(
           (angle) => `Bulk Intake/${angle}.jpg`,
         ),
       ),
@@ -148,19 +143,18 @@ describe("classifyFiles", () => {
     expect(result.pairs).toHaveLength(1);
     expect(result.pairs[0].key).toBe("Bulk Intake");
     expect(result.pairs[0].files.map((f) => f.angle)).toEqual([
-      "front",
+      "overview",
       "top",
-      "lateral",
-      "medial",
+      "left",
+      "right",
       "sole",
       "label",
     ]);
   });
 
-  it("sends 8+ files with no angle or pair info to unassigned", () => {
-    // A pair folder holds the six angles plus an optional overview.
+  it("sends 7+ files with no angle or pair info to unassigned", () => {
     const paths = Array.from(
-      { length: 8 },
+      { length: 7 },
       (_, i) => `Bulk Intake/IMG_${1000 + i}.HEIC`,
     );
 
@@ -173,7 +167,7 @@ describe("classifyFiles", () => {
   it("keeps a folder of 7+ angle-only names together", () => {
     const result = classifyFiles(
       inputs(
-        ...["front", "top", "lateral", "medial", "sole", "label"].map(
+        ...["overview", "top", "left", "right", "sole", "label"].map(
           (angle) => `Shoe A/${angle}.jpg`,
         ),
         "Shoe A/IMG_0001.HEIC",
@@ -187,7 +181,7 @@ describe("classifyFiles", () => {
 
   it("splits a large export of img-N-angle files by filename", () => {
     const paths = ["img-1", "img-2"].flatMap((key) =>
-      ["front", "top", "lateral", "medial"].map(
+      ["overview", "top", "left", "right"].map(
         (angle) => `Export/${key}-${angle}.jpg`,
       ),
     );
@@ -202,12 +196,12 @@ describe("classifyFiles", () => {
 
   it("mixes folder and filename grouping, keeping unknowns", () => {
     const result = classifyFiles(
-      inputs("pair-001/front.jpg", "pair-002-top.jpg", "IMG_9999.HEIC"),
+      inputs("pair-001/overview.jpg", "pair-002-top.jpg", "IMG_9999.HEIC"),
     );
 
     expect(summarize(result)).toEqual({
       pairs: [
-        { key: "pair-001", paths: ["pair-001/front.jpg"] },
+        { key: "pair-001", paths: ["pair-001/overview.jpg"] },
         { key: "pair-2", paths: ["pair-002-top.jpg"] },
       ],
       unassigned: ["IMG_9999.HEIC"],
@@ -303,7 +297,7 @@ describe("parseDroppedItems", () => {
         {
           entry: dirEntry("intake", [
             dirEntry("pair-001", [
-              fileEntry("front.jpg"),
+              fileEntry("overview.jpg"),
               fileEntry(".DS_Store"),
             ]),
             dirEntry("bulk", many, 100),
@@ -318,7 +312,7 @@ describe("parseDroppedItems", () => {
       ["pair-7", 1],
     ]);
     expect(result.pairs[0].files[0].relativePath).toBe(
-      "intake/pair-001/front.jpg",
+      "intake/pair-001/overview.jpg",
     );
     expect(result.unassigned).toHaveLength(150);
     expect(result.unassigned[149].relativePath).toBe(
