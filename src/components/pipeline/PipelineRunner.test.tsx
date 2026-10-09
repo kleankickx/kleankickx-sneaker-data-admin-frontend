@@ -265,6 +265,42 @@ describe("PipelineRunner", () => {
     expect(screen.queryAllByTestId("label-region")).toHaveLength(0);
   });
 
+  it("shows QR codes apart from barcodes, linked to what was read from them", async () => {
+    const url = "https://id.gs1.org/01/00195193123459?style=DD1391-100";
+    vi.mocked(getPipelineRunState).mockResolvedValue(runState({
+      status: "completed",
+      stages: stages(Array(7).fill("done"), {
+        3: {
+          output: {
+            barcodes: [{ code: "0195193123459", format: "GS1 in QR Code", checksum_valid: true, box: null, source: "2d_code" }],
+            qr_codes: [{ text: url, format: "QR Code", box: [0.6, 0.6, 0.2, 0.16], gtin: "0195193123459", sku_candidates: ["DD1391-100"] }],
+            sku_candidates: [{ sku: "DD1391-100", brand_hint: "Nike/Jordan", how: "qr_code" }],
+            sizes: {},
+            visible_text: [],
+            image_size: [1100, 1400],
+            regions: [{ kind: "qr", label: url, box: [0.6, 0.6, 0.2, 0.16], confidence: null }],
+            words: [],
+          },
+        },
+      }),
+    }));
+    await renderRunner({ initialRunId: "run-2" });
+    fireEvent.click(await screen.findByRole("button", { name: /^3\. Label reader: Done/ }));
+
+    const [box] = screen.getAllByTestId("label-region");
+    expect(box.dataset.kind).toBe("qr");
+    expect(within(box).getByText(/QR id\.gs1\.org/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: url })).toHaveAttribute("href", url);
+    expect(screen.getByText("GTIN 0195193123459")).toBeInTheDocument();
+    expect(screen.getAllByText("From QR")).toHaveLength(2);           // the product number and the style code
+    // Everything read from the QR code is placed by its box
+    expect(screen.queryByText(/not located/)).not.toBeInTheDocument();
+
+    // The style code row lights up the QR box it came from
+    fireEvent.mouseEnter(screen.getByText("DD1391-100").closest("li")!);
+    expect(box.className).toContain("shadow-");
+  });
+
   it("marks quality check verdicts on each photo", async () => {
     vi.mocked(getPipelineRunState).mockResolvedValue(runState({
       status: "completed",

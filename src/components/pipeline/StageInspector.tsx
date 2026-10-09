@@ -194,11 +194,13 @@ function QualityCheck({ output, photos, running }: { output: Json | null; photos
 }
 
 type Box = [number, number, number, number];
-type Region = { kind: "barcode" | "sku" | "size"; label: string; box: Box; confidence: number | null };
+type Region = { kind: "barcode" | "qr" | "sku" | "size"; label: string; box: Box; confidence: number | null };
+type Code2D = { text: string; format: string; box: Box | null; gtin: string | null; sku_candidates: string[] };
 type Word = { text: string; confidence: number; box: Box | null };
 
 const REGION_STYLE: Record<Region["kind"], { box: string; tag: string; name: string }> = {
   barcode: { box: "border-emerald-400 bg-emerald-400/10", tag: "bg-emerald-500", name: "Barcode" },
+  qr: { box: "border-violet-400 bg-violet-400/10", tag: "bg-violet-500", name: "QR" },
   sku: { box: "border-sky-400 bg-sky-400/10", tag: "bg-sky-500", name: "SKU" },
   size: { box: "border-amber-400 bg-amber-400/10", tag: "bg-amber-500", name: "Size" },
 };
@@ -208,9 +210,19 @@ function regionId(r: Pick<Region, "kind" | "label">) {
   return r.kind === "size" ? `size:${r.label.split(" ")[0]}` : `${r.kind}:${r.label}`;
 }
 
+function shorten(text: string, max: number) {
+  const plain = text.replace(/^https?:\/\/(www\.)?/, "");
+  return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain;
+}
+
 function at(box: Box) {
   const pct = (v: number) => `${Math.round(v * 10000) / 100}%`;
   return { left: pct(box[0]), top: pct(box[1]), width: pct(box[2]), height: pct(box[3]) };
+}
+
+/* The legend key for a kind of box, beside its finding in the side panel. */
+function Swatch({ kind, className = "" }: { kind: Region["kind"]; className?: string }) {
+  return <span aria-hidden="true" className={`h-2.5 w-2.5 shrink-0 rounded-sm border-2 ${REGION_STYLE[kind].box} ${className}`} />;
 }
 
 /* A finding drawn where it was read: a box with its class label, as on an annotated training image. */
@@ -233,7 +245,7 @@ function RegionBox({ region, index, active, onHover }: { region: Region; index: 
           below ? "top-full mt-0.5" : "bottom-full mb-0.5"
         }`}
       >
-        {style.name} {region.label}
+        {style.name} {region.kind === "qr" ? shorten(region.label, 28) : region.label}
         {region.confidence !== null && <span className="opacity-75"> {region.confidence.toFixed(2)}</span>}
       </span>
     </div>
@@ -245,7 +257,8 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
   const [showBoxes, setShowBoxes] = useState(true);
   const [showWords, setShowWords] = useState(false);
   const [active, setActive] = useState<string | null>(null);
-  const barcodes = (output?.barcodes as Array<{ code: string; format?: string; checksum_valid: boolean; backend?: string }>) ?? [];
+  const barcodes = (output?.barcodes as Array<{ code: string; format?: string; checksum_valid: boolean; backend?: string; source?: string }>) ?? [];
+  const codes = (output?.qr_codes as Code2D[]) ?? [];
   const candidates = (output?.sku_candidates as Array<{ sku: string; brand_hint?: string; how?: string }>) ?? [];
   const sizes = (output?.sizes as Record<string, number | string>) ?? {};
   const text = ((output?.visible_text as string[]) ?? []).slice(0, 12);
@@ -257,17 +270,24 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
   // frame has the image's own proportions.
   const canDraw = done && Boolean(url) && Boolean(imageSize?.[0] && imageSize?.[1]);
   const placed = new Set(regions.map(regionId));
+  // Product numbers and style codes from a QR code are shown by the QR box.
   const findings = [
-    ...barcodes.map((b) => `barcode:${b.code}`),
-    ...candidates.slice(0, 3).map((c) => `sku:${c.sku}`),
+    ...barcodes.filter((b) => b.source !== "2d_code").map((b) => `barcode:${b.code}`),
+    ...codes.map((c) => `qr:${c.text.slice(0, 80)}`),
+    ...candidates.filter((c) => c.how !== "qr_code").slice(0, 3).map((c) => `sku:${c.sku}`),
     ...["US", "UK", "EUR", "CM", "JP"].filter((k) => sizes[k] !== undefined).map((k) => `size:${k}`),
   ];
   const unplaced = findings.filter((id) => !placed.has(id)).length;
   const hover = (id: string) => ({
-    onMouseEnter: () => setActive(id),
+    onMouseEnter: () => setActive(id || null),
     onMouseLeave: () => setActive(null),
   });
   const ring = (id: string) => (active === id ? "ring-2 ring-offset-1 ring-gray-900" : "");
+  // The QR code a product number or style code was decoded from.
+  const qrFor = (match: (code: Code2D) => boolean) => {
+    const code = codes.find(match);
+    return code ? `qr:${code.text.slice(0, 80)}` : "";
+  };
 
   if (skipped) return <Empty>No label photo, so the label reader was skipped.</Empty>;
 
@@ -394,19 +414,56 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
           </h4>
           {barcodes.length ? (
             <ul className="mt-2 space-y-1.5">
-              {barcodes.map((b) => (
-                <li key={b.code} {...hover(`barcode:${b.code}`)} className={`flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 transition ${ring(`barcode:${b.code}`)}`}>
-                  {placed.has(`barcode:${b.code}`) && <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm border-2 border-emerald-400 bg-emerald-400/10" />}
-                  <span className="font-mono text-sm font-semibold tracking-wider text-gray-900">{b.code}</span>
-                  <Tag tone={b.checksum_valid ? "green" : "red"}>{b.checksum_valid ? "Checksum ok" : "Bad checksum"}</Tag>
-                  {b.format && <span className="font-mono text-[10px] text-gray-400">{b.format}{b.backend ? ` · ${b.backend}` : ""}</span>}
-                </li>
-              ))}
+              {barcodes.map((b) => {
+                const id = b.source === "2d_code" ? qrFor((q) => q.gtin === b.code) : `barcode:${b.code}`;
+                return (
+                  <li key={b.code} {...hover(id)} className={`flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 transition ${ring(id)}`}>
+                    {placed.has(id) && <Swatch kind={b.source === "2d_code" ? "qr" : "barcode"} />}
+                    <span className="font-mono text-sm font-semibold tracking-wider text-gray-900">{b.code}</span>
+                    <Tag tone={b.checksum_valid ? "green" : "red"}>{b.checksum_valid ? "Checksum ok" : "Bad checksum"}</Tag>
+                    {b.source === "2d_code" && <Tag tone="violet">From QR</Tag>}
+                    {b.format && <span className="font-mono text-[10px] text-gray-400">{b.format}{b.backend ? ` · ${b.backend}` : ""}</span>}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-1 text-sm text-gray-500">{done ? "No barcode decoded." : "—"}</p>
           )}
         </section>
+
+        {codes.length > 0 && (
+          <section className="motion-safe:animate-fade-up" style={{ animationDelay: "40ms" }}>
+            <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              <span aria-hidden="true" className="material-symbols-outlined text-[16px]">qr_code_2</span> QR &amp; 2D codes
+            </h4>
+            <ul className="mt-2 space-y-1.5">
+              {codes.map((c) => {
+                const id = `qr:${c.text.slice(0, 80)}`;
+                const link = /^https?:\/\//i.test(c.text);
+                return (
+                  <li key={c.text} {...hover(id)} className={`rounded-lg border border-gray-200 px-3 py-2 transition ${ring(id)}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {placed.has(id) && <Swatch kind="qr" />}
+                      <Tag tone="violet">{c.format}</Tag>
+                      {c.gtin && <span className="font-mono text-[11px] text-gray-500">GTIN {c.gtin}</span>}
+                      {c.sku_candidates.map((s) => (
+                        <span key={s} className="font-mono text-[11px] font-semibold text-gray-700">SKU {s}</span>
+                      ))}
+                    </div>
+                    <p className="mt-1 break-all font-mono text-[11px] text-gray-600">
+                      {link ? (
+                        <a href={c.text} target="_blank" rel="noreferrer noopener" className="underline decoration-gray-300 hover:text-gray-900">
+                          {c.text}
+                        </a>
+                      ) : c.text}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         <section className="motion-safe:animate-fade-up" style={{ animationDelay: "80ms" }}>
           <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -414,14 +471,22 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
           </h4>
           {candidates.length ? (
             <ul className="mt-2 flex flex-wrap gap-1.5">
-              {candidates.map((c, i) => (
-                <li key={c.sku} {...hover(`sku:${c.sku}`)} className={`rounded-lg border px-2.5 py-1.5 transition ${ring(`sku:${c.sku}`)} ${i === 0 ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-800"}`}>
-                  {placed.has(`sku:${c.sku}`) && <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm border-2 border-sky-400 bg-sky-400/10 align-middle" />}
-                  <span className="font-mono text-sm font-semibold">{c.sku}</span>
-                  {c.brand_hint && <span className={`ml-1.5 text-[11px] ${i === 0 ? "text-white/70" : "text-gray-500"}`}>{c.brand_hint}</span>}
-                  {c.how && c.how !== "pattern" && <span className={`ml-1 text-[10px] ${i === 0 ? "text-white/60" : "text-gray-400"}`}>({c.how})</span>}
-                </li>
-              ))}
+              {candidates.map((c, i) => {
+                const fromQr = c.how === "qr_code";
+                const id = fromQr ? qrFor((q) => q.sku_candidates.includes(c.sku)) : `sku:${c.sku}`;
+                return (
+                  <li key={c.sku} {...hover(id)} className={`rounded-lg border px-2.5 py-1.5 transition ${ring(id)} ${i === 0 ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-800"}`}>
+                    {placed.has(id) && <Swatch kind={fromQr ? "qr" : "sku"} className="mr-1.5 inline-block align-middle" />}
+                    <span className="font-mono text-sm font-semibold">{c.sku}</span>
+                    {c.brand_hint && <span className={`ml-1.5 text-[11px] ${i === 0 ? "text-white/70" : "text-gray-500"}`}>{c.brand_hint}</span>}
+                    {fromQr ? (
+                      <span className="ml-1.5"><Tag tone="violet">From QR</Tag></span>
+                    ) : (
+                      c.how && c.how !== "pattern" && <span className={`ml-1 text-[10px] ${i === 0 ? "text-white/60" : "text-gray-400"}`}>({c.how === "pattern_after_ocr_fix" ? "OCR fix" : c.how})</span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="mt-1 text-sm text-gray-500">{done ? "No style code read." : "—"}</p>
@@ -590,7 +655,9 @@ function VisionModel({ stage, photos }: { stage: PipelineStage; photos: Record<s
 }
 
 const SOURCE_HINTS: Array<[RegExp, string, "green" | "sky" | "violet" | "amber" | "gray"]> = [
-  [/catalog/i, "Catalog", "green"],
+  // "matched catalog" / "From catalog entry", not "... not in catalog"
+  [/matched catalog|catalog entry/i, "Catalog", "green"],
+  [/QR code/i, "QR", "violet"],
   [/barcode/i, "Barcode", "green"],
   [/ocr/i, "OCR", "sky"],
   [/vision model|view/i, "Vision", "violet"],
