@@ -317,6 +317,14 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
   const { user } = useAuth();
   const runnerRunId = new URLSearchParams(location.search).get("runner");
   const [showRunner, setShowRunner] = useState(Boolean(runnerRunId));
+  const runnerRef = useRef<HTMLElement>(null);
+
+  // Opening the runner brings it into view (once the pair has loaded).
+  useEffect(() => {
+    if (!showRunner || loading) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    runnerRef.current?.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  }, [showRunner, loading]);
 
   // AI results and eligibility load on their own; a failure in either
   // never blocks the pair itself.
@@ -687,7 +695,9 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
         {user?.is_staff && showRunner && (
           <div className="mt-6">
             <PipelineRunner
+              ref={runnerRef}
               pairId={sneaker.id}
+              pair={sneaker}
               initialRunId={runnerRunId}
               onResultChanged={reloadAiJob}
             />

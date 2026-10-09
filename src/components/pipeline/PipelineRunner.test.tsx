@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -14,7 +14,7 @@ import {
   type PipelineRunState,
   type PipelineStage,
 } from "../../lib/api";
-import type { AnalysisResult } from "../../lib/types";
+import type { AnalysisResult, SneakerPair } from "../../lib/types";
 import PipelineRunner from "./PipelineRunner";
 
 vi.mock("../../lib/api", () => ({
@@ -30,6 +30,18 @@ const NAMES = [
   "Load photos", "Quality check", "Label reader", "Catalog lookup",
   "Vision model", "Fusion + validation", "Save + route",
 ];
+const TEST_SWITCH = "Test run (doesn't replace the current result, review queue or catalog)";
+
+const pair = {
+  id: "pair-1",
+  capture_sessions: [{
+    id: "s", is_ready: true, created_at: "", updated_at: "",
+    images: ["overview", "left", "right", "top", "sole", "label"].map((angle) => ({
+      id: `${angle}-id`, angle, status: "uploaded", image_url: `https://img.test/${angle}.jpg`,
+      created_at: "2026-10-09T10:00:00Z",
+    })),
+  }],
+} as unknown as SneakerPair;
 
 function result(model: string): AnalysisResult {
   const f = (value: string | null, confidence = 0.9) => ({ value, confidence, evidence: "" });
@@ -82,26 +94,28 @@ beforeEach(() => {
   vi.mocked(nextPipelineStep).mockReset();
   vi.mocked(promotePipelineRun).mockReset();
 });
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-});
+afterEach(cleanup);
+
+const node = (n: number) => screen.getByRole("button", { name: new RegExp(`^${n}\\. ${NAMES[n - 1].replace("+", "\\+")}:`) });
+const mode = (name: string) => fireEvent.click(screen.getByRole("radio", { name }));
 
 async function renderRunner(props: Partial<Parameters<typeof PipelineRunner>[0]> = {}) {
-  render(<PipelineRunner pairId="pair-1" {...props} />);
-  await screen.findByText("4. Catalog lookup");
+  render(<PipelineRunner pairId="pair-1" pair={pair} {...props} />);
+  await screen.findByRole("button", { name: /^4\. Catalog lookup:/ });
 }
 
 describe("PipelineRunner", () => {
-  it("shows the seven stages and runs up to the selected one with overrides", async () => {
+  it("shows the flow and runs up to the selected stage with overrides", async () => {
     vi.mocked(startPipelineRun).mockResolvedValue(runState({ status: "stopped", mode: "to", to_stage: 3 }));
     await renderRunner();
 
-    fireEvent.click(screen.getByRole("button", { name: "3. Label reader" }));
+    mode("Up to stage");
+    fireEvent.click(node(3));
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
     fireEvent.change(screen.getByLabelText("Provider"), { target: { value: "self_hosted" } });
     expect(screen.getByLabelText("Model")).toHaveAttribute("placeholder", "qwen-vl");
     fireEvent.change(screen.getByLabelText("Prompt version"), { target: { value: "fdc-v1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Run to here (3)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run stages 1–3" }));
 
     await waitFor(() => expect(startPipelineRun).toHaveBeenCalledWith({
       sneaker_pair: "pair-1", mode: "to", stage: 3, is_test: true,
@@ -113,36 +127,36 @@ describe("PipelineRunner", () => {
     vi.mocked(startPipelineRun).mockResolvedValue(runState({ status: "completed" }));
     await renderRunner();
 
-    expect(screen.getByRole("button", { name: "Re-run from here (1)" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "5. Vision model" }));
-    fireEvent.click(screen.getByLabelText("Test run (doesn't replace the current result, review queue or catalog)"));
-    fireEvent.click(screen.getByRole("button", { name: "Re-run from here (5)" }));
+    mode("From stage");
+    expect(screen.getByRole("button", { name: "Re-run from 1 · Photos" })).toBeDisabled();
+    fireEvent.click(node(5));
+    fireEvent.click(screen.getByLabelText(TEST_SWITCH));
+    fireEvent.click(screen.getByRole("button", { name: "Re-run from 5 · Vision" }));
 
     await waitFor(() => expect(startPipelineRun).toHaveBeenCalledWith(expect.objectContaining({
       mode: "from", stage: 5, source_run: "run-1", is_test: false,
     })));
   });
 
-  it("polls a running run until it finishes", async () => {
+  it("polls a running run and follows the live stage", async () => {
     vi.mocked(startPipelineRun).mockResolvedValue(runState());
     vi.mocked(getPipelineRunState).mockResolvedValue(runState({
       status: "completed",
       stages: stages(Array(7).fill("done"), {
-        3: { summary: "barcode 0195193123459, SKU DD1391-100" },
         4: { summary: "catalog hit: Nike Dunk Low (DD1391-100)" },
+        7: { summary: "Test run saved; not routed", output: { test_run: true, low_fields: [] } },
       }),
     }));
     await renderRunner();
 
-    fireEvent.click(screen.getByRole("button", { name: "Run all" }));
-    // The run's status and stage 1's status.
-    expect(await screen.findAllByText("Running")).toHaveLength(2);
-    // The panel polls every 1.5 s while the run is active.
-    expect(
-      await screen.findByText("catalog hit: Nike Dunk Low (DD1391-100)", {}, { timeout: 4000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("barcode 0195193123459, SKU DD1391-100")).toBeInTheDocument();
-    expect(getPipelineRunState).toHaveBeenCalledWith("run-2");
+    fireEvent.click(screen.getByRole("button", { name: "Run all stages" }));
+    expect(await screen.findByRole("button", { name: /^1\. Load photos: Running/ })).toBeInTheDocument();
+
+    // The panel polls every 1.5 s; the inspector moves to the last stage.
+    expect(await screen.findByText("Test run saved", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(node(4)).toHaveAccessibleName(/Done$/);
+    fireEvent.click(node(4));
+    expect(screen.getByText("catalog hit: Nike Dunk Low (DD1391-100)")).toBeInTheDocument();
   });
 
   it("steps one stage at a time", async () => {
@@ -153,11 +167,71 @@ describe("PipelineRunner", () => {
     vi.mocked(nextPipelineStep).mockResolvedValue(runState({ status: "queued", mode: "step" }));
     await renderRunner();
 
-    fireEvent.click(screen.getByRole("button", { name: "Step" }));
+    mode("Step");
+    fireEvent.click(screen.getByRole("button", { name: "Step through" }));
     fireEvent.click(await screen.findByRole("button", { name: /Next/ }));
 
     await waitFor(() => expect(nextPipelineStep).toHaveBeenCalledWith("run-2"));
     expect(startPipelineRun).toHaveBeenCalledWith(expect.objectContaining({ mode: "step" }));
+  });
+
+  it("shows the label being read: scan state, barcode, SKU, sizes and a preprocessed view", async () => {
+    vi.mocked(getPipelineRunState).mockResolvedValue(runState({
+      status: "completed",
+      stages: stages(Array(7).fill("done"), {
+        3: {
+          summary: "barcode 0195193123459, SKU DD1391-100, US 10",
+          output: {
+            barcodes: [{ code: "0195193123459", format: "EAN-13", checksum_valid: true }],
+            sku_candidates: [{ sku: "DD1391-100", brand_hint: "Nike/Jordan", how: "pattern" }],
+            sizes: { US: 10, UK: 9, EUR: 44 },
+            size_consistency: "consistent",
+            visible_text: ["NIKE", "MADE IN VIETNAM"],
+            ocr_backend: "tesseract",
+            ocr_available: true,
+          },
+        },
+      }),
+    }));
+    await renderRunner({ initialRunId: "run-2" });
+    fireEvent.click(await screen.findByRole("button", { name: /^3\. Label reader: Done/ }));
+
+    expect(screen.getByText("Scanned")).toBeInTheDocument();
+    expect(screen.getByText("0195193123459")).toBeInTheDocument();
+    expect(screen.getByText("Checksum ok")).toBeInTheDocument();
+    expect(screen.getByText("DD1391-100")).toBeInTheDocument();
+    expect(screen.getByText("consistent")).toBeInTheDocument();
+    expect(screen.getByText("MADE IN VIETNAM")).toBeInTheDocument();
+
+    const label = screen.getByAltText("Label photo");
+    expect(label).toHaveAttribute("src", "https://img.test/label.jpg");
+    fireEvent.click(screen.getByRole("button", { name: "Preprocessed" }));
+    expect(label.getAttribute("style")).toContain("grayscale(1)");
+  });
+
+  it("marks quality check verdicts on each photo", async () => {
+    vi.mocked(getPipelineRunState).mockResolvedValue(runState({
+      status: "completed",
+      stages: stages(Array(7).fill("done"), {
+        2: {
+          output: {
+            views: {
+              lateral: { ok: true, issues: [], metrics: { sharpness: 240, brightness: 120 } },
+              sole: { ok: false, issues: ["blurry (sharpness 40 < 100)"], metrics: { sharpness: 40 } },
+            },
+            missing_views: ["front"],
+          },
+        },
+      }),
+    }));
+    await renderRunner({ initialRunId: "run-2" });
+    fireEvent.click(await screen.findByRole("button", { name: /^2\. Quality check:/ }));
+
+    expect(screen.getByText("Pass")).toBeInTheDocument();
+    expect(screen.getByText("Fail")).toBeInTheDocument();
+    expect(screen.getByText("blurry (sharpness 40 < 100)")).toBeInTheDocument();
+    // We never capture front, so it isn't shown as missing.
+    expect(screen.queryByText("Missing")).not.toBeInTheDocument();
   });
 
   it("compares a finished test run with the current result and can use it", async () => {
@@ -178,13 +252,16 @@ describe("PipelineRunner", () => {
     });
     await renderRunner({ initialRunId: "run-2", onResultChanged });
 
-    expect(await screen.findByText("Test run")).toBeInTheDocument();
+    // The run's badge, besides the "Test run" switch.
+    expect(await screen.findAllByText("Test run")).toHaveLength(2);
     expect(screen.getByText(/Photos changed since the source run/)).toBeInTheDocument();
     expect(screen.getByText("Result vs current (1 field differs)")).toBeInTheDocument();
-    expect(screen.getByText("Dunk Low").closest("tr")).toHaveClass("bg-amber-50/70");
+    const row = screen.getByText("Dunk Low").closest("tr") as HTMLElement;
+    expect(row).toHaveClass("bg-amber-50/70");
+    expect(within(row).getByText("Air Force 1")).toBeInTheDocument();
     expect(onResultChanged).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use this result" }));
+    fireEvent.click(screen.getByRole("button", { name: /Use this result/ }));
 
     await waitFor(() => expect(promotePipelineRun).toHaveBeenCalledWith("run-2"));
     expect(onResultChanged).toHaveBeenCalledTimes(1);
@@ -197,22 +274,31 @@ describe("PipelineRunner", () => {
     }));
     await renderRunner({ onResultChanged });
 
-    fireEvent.click(screen.getByLabelText("Test run (doesn't replace the current result, review queue or catalog)"));
-    fireEvent.click(screen.getByRole("button", { name: "Run all" }));
+    fireEvent.click(screen.getByLabelText(TEST_SWITCH));
+    fireEvent.click(screen.getByRole("button", { name: "Run all stages" }));
 
     await waitFor(() => expect(onResultChanged).toHaveBeenCalledTimes(1));
   });
 
-  it("expands a stage to its output, with the raw vision JSON collapsible", async () => {
+  it("keeps the vision model's raw JSON collapsible", async () => {
     vi.mocked(getPipelineRunState).mockResolvedValue(runState({
       status: "completed",
       stages: stages(Array(7).fill("done"), {
-        5: { summary: "vision-1: Nike", output: { model: "vision-1", raw: { brand: { value: "Nike" } } } },
+        5: {
+          summary: "vision-1: Nike",
+          output: {
+            provider: "openai", model: "vision-1", prompt_version: "fdc-v2",
+            output: { brand: { value: "Nike", confidence: 0.95, evidence: "" } },
+            raw: { brand: { value: "Nike" } },
+          },
+        },
       }),
     }));
     await renderRunner({ initialRunId: "run-2" });
+    fireEvent.click(await screen.findByRole("button", { name: /^5\. Vision model:/ }));
 
-    expect(await screen.findByText("vision-1: Nike")).toBeInTheDocument();
+    expect(screen.getByText("vision-1: Nike")).toBeInTheDocument();
     expect(screen.getByText("Vision model raw JSON")).toBeInTheDocument();
+    expect(screen.getByText("0.95")).toBeInTheDocument();
   });
 });
