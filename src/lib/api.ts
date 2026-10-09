@@ -39,6 +39,8 @@ export interface AuthUser {
   name?: string;
   username?: string;
   role?: string;
+  /* Staff see the pipeline monitor. */
+  is_staff?: boolean;
 }
 
 export type ApiErrorCode =
@@ -946,5 +948,179 @@ export async function getReviewQueueNeighbors(
   );
 
   return response.data.data;
+}
+
+/* ============================================================
+   PIPELINE MONITOR (staff only)
+   ============================================================ */
+
+export interface MonitorParams {
+  /* YYYY-MM-DD, inclusive. Defaults to the last 7 days. */
+  from?: string;
+  to?: string;
+  prompt_version?: string;
+  model?: string;
+}
+
+export type FunnelStep =
+  | "created"
+  | "complete"
+  | "analyzed"
+  | "needs_review"
+  | "verified";
+
+export interface DayCount {
+  day: string;
+  count: number;
+}
+
+export interface MonitorRunRow {
+  run_id: string;
+  sneaker_pair: string;
+  sneaker_pair_id: string;
+  prompt_version: string;
+  model_name: string;
+  vlm_used: boolean;
+  duration_ms: number | null;
+  created_at: string;
+}
+
+export interface MonitorFailure {
+  kind: "job_failed" | "vision_failed";
+  job_id: string | null;
+  run_id: string | null;
+  sneaker_pair: string;
+  sneaker_pair_id: string;
+  error: string;
+  at: string;
+}
+
+/* Matches apps.ai.monitoring.overview. Rates are 0-1 or null. */
+export interface PipelineOverview {
+  range: { from: string; to: string };
+  filters: { prompt_versions: string[]; models: string[] };
+  funnel: Array<{ step: FunnelStep; count: number; rate: number | null }>;
+  run_health: {
+    jobs_by_status: Record<"queued" | "processing" | "completed" | "failed", number>;
+    runs: number;
+    runs_per_day: DayCount[];
+    avg_duration_ms: number | null;
+    p95_duration_ms: number | null;
+    vision_failed: number;
+    vision_failure_rate: number | null;
+    vision_disabled: number;
+    oldest_queued_age_seconds: number | null;
+    queue_stuck: boolean;
+    recent_failures: MonitorFailure[];
+    recent_runs: MonitorRunRow[];
+  };
+  stages: {
+    runs: number;
+    qc: {
+      pass_rate: number | null;
+      per_view: Array<{ view: string; runs: number; pass_rate: number | null }>;
+      top_issues: Array<{ issue: string; count: number }>;
+    };
+    barcode_rate: number | null;
+    sku_found_rate: number | null;
+    sku_sources: Record<"barcode" | "ocr" | "ai", { count: number; rate: number | null }>;
+    catalog_hit_rate: number | null;
+    size_found_rate: number | null;
+    size_consistent_rate: number | null;
+    fields: Array<{
+      field: string;
+      avg_confidence: number | null;
+      below_threshold_rate: number | null;
+    }>;
+  };
+  review: {
+    queue_size: number;
+    oldest_unverified_age_seconds: number | null;
+    verified_per_day: DayCount[];
+    verified_per_reviewer: Array<{ reviewer: string; count: number }>;
+    changed_by_field: Array<{
+      prompt_version: string;
+      field: string;
+      reviewed: number;
+      changed: number;
+      changed_rate: number | null;
+    }>;
+  };
+  catalog: { total: number; added_per_week: Array<{ week: string; count: number }> };
+  generated_at: string;
+}
+
+export interface FunnelPair {
+  id: string;
+  pair_id: string;
+  brand: string;
+  model: string;
+  status: string;
+  created_at: string;
+}
+
+export interface RunStage {
+  stage: "download" | "quality_check" | "label_reader" | "vision_model" | "fusion" | string;
+  status: "ok" | "warning" | "failed" | "skipped";
+  duration_ms: number;
+  output: Record<string, unknown>;
+}
+
+export interface PipelineRunDetail extends AnalysisRun {
+  debug: {
+    stages?: RunStage[];
+    sku_trace?: string[];
+    label?: Record<string, unknown>;
+    catalog_row?: Record<string, string> | null;
+    [key: string]: unknown;
+  };
+  raw_response: Record<string, unknown> | null;
+  job_status: string | null;
+  qc_ok: boolean;
+  barcode_decoded: boolean;
+  sku_source: "barcode" | "ocr" | "ai" | "none";
+  catalog_hit: boolean;
+  size_found: boolean;
+  size_consistent: boolean;
+}
+
+function monitorQuery(params: MonitorParams) {
+  return Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value),
+  );
+}
+
+export async function getPipelineOverview(
+  params: MonitorParams,
+): Promise<PipelineOverview> {
+  const response = await api.get<ApiResponse<PipelineOverview>>(
+    "/pipeline-monitor/",
+    { params: monitorQuery(params) },
+  );
+  return response.data.data;
+}
+
+export async function getFunnelPairs(
+  step: FunnelStep,
+  params: MonitorParams,
+  page = 1,
+): Promise<{ results: FunnelPair[]; meta: SneakersMeta }> {
+  const response = await api.get<ApiResponse<FunnelPair[]> & { meta: SneakersMeta }>(
+    `/pipeline-monitor/funnel/${step}/`,
+    { params: { ...monitorQuery(params), page, page_size: 25 } },
+  );
+  return { results: response.data.data, meta: response.data.meta };
+}
+
+export async function getPipelineRun(runId: string): Promise<PipelineRunDetail> {
+  const response = await api.get<ApiResponse<PipelineRunDetail>>(
+    `/pipeline-monitor/runs/${runId}/`,
+  );
+  return response.data.data;
+}
+
+/** Queue a fresh analysis of a pair. Rejects if one is already pending. */
+export async function rerunAnalysis(sneakerPairId: string): Promise<void> {
+  await api.post("/pipeline-monitor/rerun/", { sneaker_pair: sneakerPairId });
 }
 

@@ -10,6 +10,8 @@ import SneakersPage from "../pages/SneakersPage";
 import SneakerDetailsPage from "../pages/SneakerDetailsPage";
 import VerificationPage from "../pages/VerificationPage";
 import ReviewQueuePage from "../pages/ReviewQueuePage";
+import PipelineMonitorPage from "../pages/PipelineMonitorPage";
+import PipelineRunPage from "../pages/PipelineRunPage";
 import LoginPage from "../pages/LoginPage";
 
 export const router = createBrowserRouter([
@@ -59,6 +61,14 @@ export const router = createBrowserRouter([
       {
         path: "review-queue",
         element: <ReviewQueuePage />,
+      },
+      {
+        path: "pipeline-monitor",
+        element: <PipelineMonitorPage />,
+      },
+      {
+        path: "pipeline-monitor/runs/:runId",
+        element: <PipelineRunPage />,
       },
     ],
   },

@@ -13,6 +13,7 @@ type NavigationItem = {
   name: string;
   path: string;
   icon: string;
+  staffOnly?: boolean;
 };
 
 const navigation: NavigationItem[] = [
@@ -25,6 +26,12 @@ const navigation: NavigationItem[] = [
     icon: "fact_check",
   },
   { name: "Review queue", path: "/review-queue", icon: "rule" },
+  {
+    name: "Pipeline monitor",
+    path: "/pipeline-monitor",
+    icon: "monitoring",
+    staffOnly: true,
+  },
 ];
 
 function MaterialIcon({
@@ -53,6 +60,9 @@ function SidebarContent({
 }: {
   onNavigate?: () => void;
 }) {
+  const { user } = useAuth();
+  const items = navigation.filter((item) => !item.staffOnly || user?.is_staff);
+
   return (
     <>
       {/* Brand */}
@@ -75,7 +85,7 @@ function SidebarContent({
         </p>
 
         <div className="space-y-1">
-          {navigation.map((item) => (
+          {items.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
