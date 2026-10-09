@@ -266,7 +266,11 @@ function RunHealth({
       )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Runs" value={health.runs} />
+        <Stat
+          label="Runs"
+          value={health.runs}
+          hint={`+ ${health.test_runs} test run${health.test_runs === 1 ? "" : "s"}, not counted below`}
+        />
         <Stat label="Avg duration" value={duration(health.avg_duration_ms)} />
         <Stat label="95th percentile" value={duration(health.p95_duration_ms)} />
         <Stat
@@ -365,7 +369,14 @@ function RunHealth({
                 to={`/pipeline-monitor/runs/${run.run_id}`}
                 className="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-gray-50"
               >
-                <span className="font-mono text-xs font-semibold text-gray-900">{run.sneaker_pair_id}</span>
+                <span className="flex items-center gap-2 font-mono text-xs font-semibold text-gray-900">
+                  {run.sneaker_pair_id}
+                  {run.is_test && (
+                    <span className="rounded bg-violet-50 px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase text-violet-700">
+                      Test
+                    </span>
+                  )}
+                </span>
                 <span className="truncate text-xs text-gray-500">
                   {run.prompt_version} · {run.model_name || "no vision model"}
                   {!run.vlm_used && " · label-only"} · {duration(run.duration_ms)}

@@ -13,8 +13,10 @@ import ImageViewer from "../components/verification/ImageViewer";
 import VerificationPanel, {
   type VerificationPanelHandle,
 } from "../components/verification/VerificationPanel";
+import PipelineRunner from "../components/pipeline/PipelineRunner";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import ReplaceImagesModal from "../components/sneakers/ReplaceImagesModal";
+import { useAuth } from "../lib/auth-context";
 import {
   getLatestAiJob,
   getLatestAnalysisRun,
@@ -311,6 +313,11 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
 
   const panel = useRef<VerificationPanelHandle>(null);
 
+  // Staff can run the pipeline here; ?runner=<run id> opens a run.
+  const { user } = useAuth();
+  const runnerRunId = new URLSearchParams(location.search).get("runner");
+  const [showRunner, setShowRunner] = useState(Boolean(runnerRunId));
+
   // AI results and eligibility load on their own; a failure in either
   // never blocks the pair itself.
   useEffect(() => {
@@ -540,6 +547,20 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
               </span>
               Delete
             </button>
+
+            {user?.is_staff && (
+              <button
+                type="button"
+                onClick={() => setShowRunner((shown) => !shown)}
+                aria-expanded={showRunner}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">
+                  play_circle
+                </span>
+                {showRunner ? "Hide pipeline" : "Run pipeline"}
+              </button>
+            )}
           </div>
         </header>
 
@@ -662,6 +683,16 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
             </section>
           </div>
         </div>
+
+        {user?.is_staff && showRunner && (
+          <div className="mt-6">
+            <PipelineRunner
+              pairId={sneaker.id}
+              initialRunId={runnerRunId}
+              onResultChanged={reloadAiJob}
+            />
+          </div>
+        )}
       </main>
     </div>
   );

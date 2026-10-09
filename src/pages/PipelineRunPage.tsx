@@ -7,6 +7,7 @@ import {
   type PipelineRunDetail,
   type RunStage,
 } from "../lib/api";
+import StageTimeline from "../components/pipeline/StageTimeline";
 import { readApiError } from "../lib/api-errors";
 import { FIELD_LABELS, STAGE_LABELS, duration } from "../lib/monitor";
 
@@ -197,7 +198,14 @@ export default function PipelineRunPage() {
           <>
             <header className="mt-4 flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h1 className="font-mono text-2xl font-semibold text-gray-900">{run.sneaker_pair_id}</h1>
+                <h1 className="flex items-center gap-3 font-mono text-2xl font-semibold text-gray-900">
+                  {run.sneaker_pair_id}
+                  {run.is_test && (
+                    <span className="rounded-full bg-violet-50 px-2.5 py-0.5 font-sans text-xs font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-inset ring-violet-600/20">
+                      Test run
+                    </span>
+                  )}
+                </h1>
                 <p className="mt-1 text-sm text-gray-500">
                   {run.prompt_version} · {run.model_name || "no vision model"} · {duration(run.duration_ms)} ·{" "}
                   {new Date(run.created_at).toLocaleString()}
@@ -207,6 +215,9 @@ export default function PipelineRunPage() {
               <div className="flex gap-2">
                 <Link to={`/sneakers/${run.sneaker_pair}`} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
                   Open pair
+                </Link>
+                <Link to={`/sneakers/${run.sneaker_pair}?runner=${run.id}`} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  Open in runner
                 </Link>
                 <button type="button" onClick={rerun} disabled={queued}
                   className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
@@ -220,7 +231,12 @@ export default function PipelineRunPage() {
             <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-semibold text-gray-900">Steps</h2>
               <div className="mt-4">
-                {run.debug.stages?.length ? (
+                {run.notes?.map((note) => (
+                  <p key={note} className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{note}</p>
+                ))}
+                {run.stages?.length ? (
+                  <StageTimeline stages={run.stages} />
+                ) : run.debug.stages?.length ? (
                   <Timeline stages={run.debug.stages} />
                 ) : (
                   <p className="text-sm text-gray-500">Step timing wasn't recorded for this run (it predates the monitor).</p>

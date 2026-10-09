@@ -902,7 +902,10 @@ export async function identifySneaker(
    FOOTWEAR DATA CAPTURE ANALYSIS
    ============================================================ */
 
-/** The pair's newest analysis run, or null if it has none. */
+/**
+ * The pair's current result: its latest finished real run (never a test
+ * run or one in progress), or null if it has none.
+ */
 export async function getLatestAnalysisRun(
   sneakerId: string,
 ): Promise<AnalysisRun | null> {
@@ -911,7 +914,7 @@ export async function getLatestAnalysisRun(
     {
       params: {
         sneaker_pair: sneakerId,
-        ordering: "-created_at",
+        ordering: "-finished_at",
         page_size: 1,
       },
     },
@@ -981,6 +984,8 @@ export interface MonitorRunRow {
   prompt_version: string;
   model_name: string;
   vlm_used: boolean;
+  is_test: boolean;
+  status: string;
   duration_ms: number | null;
   created_at: string;
 }
@@ -1009,6 +1014,8 @@ export interface PipelineOverview {
     vision_failed: number;
     vision_failure_rate: number | null;
     vision_disabled: number;
+    /* Test runs in the range; every other run metric excludes them. */
+    test_runs: number;
     oldest_queued_age_seconds: number | null;
     queue_stuck: boolean;
     recent_failures: MonitorFailure[];
@@ -1076,6 +1083,11 @@ export interface PipelineRunDetail extends AnalysisRun {
   };
   raw_response: Record<string, unknown> | null;
   job_status: string | null;
+  status: PipelineRunStatus;
+  is_test: boolean;
+  notes: string[];
+  /* Saved per-stage results; empty for runs before the stage runner. */
+  stages: PipelineStage[];
   qc_ok: boolean;
   barcode_decoded: boolean;
   sku_source: "barcode" | "ocr" | "ai" | "none";
@@ -1122,5 +1134,148 @@ export async function getPipelineRun(runId: string): Promise<PipelineRunDetail> 
 /** Queue a fresh analysis of a pair. Rejects if one is already pending. */
 export async function rerunAnalysis(sneakerPairId: string): Promise<void> {
   await api.post("/pipeline-monitor/rerun/", { sneaker_pair: sneakerPairId });
+}
+
+/* ============================================================
+   STAGE-BY-STAGE PIPELINE RUNNER (staff only)
+   ============================================================ */
+
+export type PipelineStageStatus =
+  | "waiting"
+  | "running"
+  | "done"
+  | "failed"
+  | "skipped"
+  | "reused";
+
+export type PipelineRunStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "stopped"
+  | "completed"
+  | "failed";
+
+export type PipelineMode = "all" | "to" | "from" | "step";
+
+export interface PipelineOverrides {
+  provider?: string;
+  model?: string;
+  prompt_version?: string;
+  ocr_backend?: string;
+}
+
+/* Matches PipelineRunViewSet.options. */
+export interface PipelineOptions {
+  stages: Array<{ stage: number; name: string }>;
+  providers: Array<{ name: string; default_model: string; is_default: boolean }>;
+  prompt_versions: string[];
+  default_prompt_version: string;
+  ocr_backends: string[];
+}
+
+/* Matches PipelineStageResultSerializer. */
+export interface PipelineStage {
+  stage: number;
+  name: string;
+  status: PipelineStageStatus;
+  summary: string;
+  output: Record<string, unknown> | null;
+  error: string;
+  duration_ms: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  reused_from_run: string | null;
+}
+
+/* Matches PipelineRunSerializer. */
+export interface PipelineRunState {
+  id: string;
+  sneaker_pair: string;
+  sneaker_pair_id: string;
+  status: PipelineRunStatus;
+  mode: PipelineMode;
+  from_stage: number;
+  to_stage: number;
+  source_run: string | null;
+  is_test: boolean;
+  overrides: PipelineOverrides;
+  prompt_version: string;
+  provider: string;
+  model_name: string;
+  notes: string[];
+  error: string;
+  requested_by: string | null;
+  result: AnalysisRun["result"] | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  stages: PipelineStage[];
+  /* The pair's current result, for comparison. */
+  current: {
+    run_id: string;
+    is_this_run: boolean;
+    prompt_version: string;
+    model_name: string;
+    finished_at: string | null;
+    result: AnalysisRun["result"];
+  } | null;
+}
+
+/* Matches PipelineRunListSerializer. */
+export interface PipelineRunSummary {
+  id: string;
+  status: PipelineRunStatus;
+  mode: PipelineMode;
+  is_test: boolean;
+  prompt_version: string;
+  model_name: string;
+  created_at: string;
+  finished_at: string | null;
+  stage_statuses: Record<string, PipelineStageStatus>;
+}
+
+export interface StartPipelineRun {
+  sneaker_pair: string;
+  mode: PipelineMode;
+  stage?: number;
+  source_run?: string;
+  is_test?: boolean;
+  overrides?: PipelineOverrides;
+}
+
+export async function getPipelineOptions(): Promise<PipelineOptions> {
+  const response = await api.get<ApiResponse<PipelineOptions>>("/pipeline-runs/options/");
+  return response.data.data;
+}
+
+export async function listPipelineRuns(sneakerId: string): Promise<PipelineRunSummary[]> {
+  const response = await api.get<ApiResponse<PipelineRunSummary[]>>("/pipeline-runs/", {
+    params: { sneaker_pair: sneakerId },
+  });
+  return response.data.data;
+}
+
+export async function startPipelineRun(payload: StartPipelineRun): Promise<PipelineRunState> {
+  const response = await api.post<ApiResponse<PipelineRunState>>("/pipeline-runs/", payload);
+  return response.data.data;
+}
+
+export async function getPipelineRunState(runId: string): Promise<PipelineRunState> {
+  const response = await api.get<ApiResponse<PipelineRunState>>(`/pipeline-runs/${runId}/`);
+  return response.data.data;
+}
+
+/** Step mode: run the next stage. */
+export async function nextPipelineStep(runId: string): Promise<PipelineRunState> {
+  const response = await api.post<ApiResponse<PipelineRunState>>(`/pipeline-runs/${runId}/next/`);
+  return response.data.data;
+}
+
+/** Make a finished test run the pair's current result. */
+export async function promotePipelineRun(runId: string): Promise<PipelineRunState> {
+  const response = await api.post<ApiResponse<PipelineRunState>>(`/pipeline-runs/${runId}/promote/`);
+  return response.data.data;
 }
 

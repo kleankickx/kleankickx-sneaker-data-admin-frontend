@@ -16,6 +16,11 @@ import {
 import type { AnalysisRun, CaptureImage, SneakerPair } from "../lib/types";
 import SneakerDetailsPage from "./SneakerDetailsPage";
 
+// A verifier, not staff: the pipeline runner stays hidden.
+vi.mock("../lib/auth-context", () => ({
+  useAuth: () => ({ user: { id: "u1", email: "v@example.com", is_staff: false } }),
+}));
+
 vi.mock("../lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/api")>()),
   getSneaker: vi.fn(),
