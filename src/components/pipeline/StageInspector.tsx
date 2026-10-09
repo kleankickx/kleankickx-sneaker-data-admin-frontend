@@ -193,29 +193,119 @@ function QualityCheck({ output, photos, running }: { output: Json | null; photos
   );
 }
 
+type Box = [number, number, number, number];
+type Region = { kind: "barcode" | "sku" | "size"; label: string; box: Box; confidence: number | null };
+type Word = { text: string; confidence: number; box: Box | null };
+
+const REGION_STYLE: Record<Region["kind"], { box: string; tag: string; name: string }> = {
+  barcode: { box: "border-emerald-400 bg-emerald-400/10", tag: "bg-emerald-500", name: "Barcode" },
+  sku: { box: "border-sky-400 bg-sky-400/10", tag: "bg-sky-500", name: "SKU" },
+  size: { box: "border-amber-400 bg-amber-400/10", tag: "bg-amber-500", name: "Size" },
+};
+
+/* One id per finding, shared by its box and its row in the side panel. */
+function regionId(r: Pick<Region, "kind" | "label">) {
+  return r.kind === "size" ? `size:${r.label.split(" ")[0]}` : `${r.kind}:${r.label}`;
+}
+
+function at(box: Box) {
+  const pct = (v: number) => `${Math.round(v * 10000) / 100}%`;
+  return { left: pct(box[0]), top: pct(box[1]), width: pct(box[2]), height: pct(box[3]) };
+}
+
+/* A finding drawn where it was read: a box with its class label, as on an annotated training image. */
+function RegionBox({ region, index, active, onHover }: { region: Region; index: number; active: boolean; onHover: (id: string | null) => void }) {
+  const style = REGION_STYLE[region.kind];
+  const below = region.box[1] < 0.06;
+  return (
+    <div
+      data-testid="label-region"
+      data-kind={region.kind}
+      onMouseEnter={() => onHover(regionId(region))}
+      onMouseLeave={() => onHover(null)}
+      className={`absolute rounded-[3px] border-2 transition-shadow duration-200 motion-safe:animate-box-in ${style.box} ${
+        active ? "z-10 shadow-[0_0_0_3px_rgba(255,255,255,0.85),0_0_18px_4px_rgba(255,255,255,0.35)]" : ""
+      }`}
+      style={{ ...at(region.box), animationDelay: `${150 + index * 120}ms` }}
+    >
+      <span
+        className={`absolute -left-0.5 whitespace-nowrap rounded-sm px-1 py-px font-mono text-[10px] font-semibold leading-tight text-white ${style.tag} ${
+          below ? "top-full mt-0.5" : "bottom-full mb-0.5"
+        }`}
+      >
+        {style.name} {region.label}
+        {region.confidence !== null && <span className="opacity-75"> {region.confidence.toFixed(2)}</span>}
+      </span>
+    </div>
+  );
+}
+
 function LabelScan({ output, url, running, skipped }: { output: Json | null; url?: string; running: boolean; skipped: boolean }) {
   const [processed, setProcessed] = useState(false);
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [showWords, setShowWords] = useState(false);
+  const [active, setActive] = useState<string | null>(null);
   const barcodes = (output?.barcodes as Array<{ code: string; format?: string; checksum_valid: boolean; backend?: string }>) ?? [];
   const candidates = (output?.sku_candidates as Array<{ sku: string; brand_hint?: string; how?: string }>) ?? [];
   const sizes = (output?.sizes as Record<string, number | string>) ?? {};
   const text = ((output?.visible_text as string[]) ?? []).slice(0, 12);
+  const regions = ((output?.regions as Region[]) ?? []).filter((r) => r.box);
+  const words = ((output?.words as Word[]) ?? []).filter((w): w is Word & { box: Box } => Boolean(w.box));
+  const imageSize = output?.image_size as [number, number] | undefined;
   const done = Boolean(output) && !skipped;
+  // Boxes are fractions of the label image, so they line up only when the
+  // frame has the image's own proportions.
+  const canDraw = done && Boolean(url) && Boolean(imageSize?.[0] && imageSize?.[1]);
+  const placed = new Set(regions.map(regionId));
+  const findings = [
+    ...barcodes.map((b) => `barcode:${b.code}`),
+    ...candidates.slice(0, 3).map((c) => `sku:${c.sku}`),
+    ...["US", "UK", "EUR", "CM", "JP"].filter((k) => sizes[k] !== undefined).map((k) => `size:${k}`),
+  ];
+  const unplaced = findings.filter((id) => !placed.has(id)).length;
+  const hover = (id: string) => ({
+    onMouseEnter: () => setActive(id),
+    onMouseLeave: () => setActive(null),
+  });
+  const ring = (id: string) => (active === id ? "ring-2 ring-offset-1 ring-gray-900" : "");
 
   if (skipped) return <Empty>No label photo, so the label reader was skipped.</Empty>;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <div>
-        <div className="relative aspect-[4/5] overflow-hidden rounded-xl bg-gray-950">
+        <div
+          className={`relative overflow-hidden rounded-xl bg-gray-950 ${canDraw ? "" : "aspect-[4/5]"}`}
+          style={canDraw && imageSize ? { aspectRatio: `${imageSize[0]} / ${imageSize[1]}` } : undefined}
+        >
           {url ? (
             <img
               src={url}
               alt="Label photo"
-              className="h-full w-full object-contain transition-[filter] duration-500"
+              className={`h-full w-full transition-[filter] duration-500 ${canDraw ? "object-fill" : "object-contain"}`}
               style={processed ? { filter: "grayscale(1) contrast(2.6) brightness(1.15)" } : undefined}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">No label photo</div>
+          )}
+          {canDraw && showWords && (
+            <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+              {words.map((w, i) => (
+                <span
+                  key={i}
+                  data-testid="label-word"
+                  className={`absolute border motion-safe:animate-fade-up ${w.confidence < 0.6 ? "border-dashed border-rose-300/80" : "border-white/70"}`}
+                  style={{ ...at(w.box), animationDelay: `${Math.min(i, 40) * 12}ms` }}
+                />
+              ))}
+            </div>
+          )}
+          {canDraw && showBoxes && (
+            <div className="absolute inset-0">
+              {regions.map((r, i) => (
+                <RegionBox key={regionId(r)} region={r} index={i} active={active === regionId(r)} onHover={setActive} />
+              ))}
+            </div>
           )}
           {/* Measurement grid */}
           <div
@@ -254,8 +344,47 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
               </button>
             ))}
           </div>
-          {processed && <span className="text-[11px] text-gray-400">Approximates the OCR input: grayscale + threshold</span>}
+          {canDraw && (
+            <div className="flex gap-1.5 text-xs">
+              {[
+                { label: "Boxes", on: showBoxes, set: setShowBoxes, count: regions.length },
+                { label: "OCR words", on: showWords, set: setShowWords, count: words.length },
+              ].map((layer) => (
+                <button
+                  key={layer.label}
+                  type="button"
+                  aria-pressed={layer.on}
+                  disabled={!layer.count}
+                  onClick={() => layer.set(!layer.on)}
+                  className={`rounded-md border px-2 py-1 font-medium transition disabled:opacity-40 ${
+                    layer.on ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-600 hover:border-gray-400"
+                  }`}
+                >
+                  {layer.label} <span className="font-mono opacity-60">{layer.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+        {processed && <p className="mt-1 text-[11px] text-gray-400">Approximates the OCR input: grayscale + threshold</p>}
+        {canDraw && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+            {(Object.keys(REGION_STYLE) as Region["kind"][]).map((kind) => (
+              <span key={kind} className="inline-flex items-center gap-1">
+                <span className={`h-2.5 w-2.5 rounded-sm border-2 ${REGION_STYLE[kind].box}`} />
+                {REGION_STYLE[kind].name}
+              </span>
+            ))}
+            {unplaced > 0 && (
+              <span className="text-gray-400">
+                · {unplaced} finding{unplaced === 1 ? "" : "s"} read but not located on the photo
+              </span>
+            )}
+          </div>
+        )}
+        {done && url && !imageSize && (
+          <p className="mt-2 text-[11px] text-gray-400">This run predates label boxes. Re-run the label reader to see where each finding was read.</p>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -266,7 +395,8 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
           {barcodes.length ? (
             <ul className="mt-2 space-y-1.5">
               {barcodes.map((b) => (
-                <li key={b.code} className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2">
+                <li key={b.code} {...hover(`barcode:${b.code}`)} className={`flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 transition ${ring(`barcode:${b.code}`)}`}>
+                  {placed.has(`barcode:${b.code}`) && <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm border-2 border-emerald-400 bg-emerald-400/10" />}
                   <span className="font-mono text-sm font-semibold tracking-wider text-gray-900">{b.code}</span>
                   <Tag tone={b.checksum_valid ? "green" : "red"}>{b.checksum_valid ? "Checksum ok" : "Bad checksum"}</Tag>
                   {b.format && <span className="font-mono text-[10px] text-gray-400">{b.format}{b.backend ? ` · ${b.backend}` : ""}</span>}
@@ -285,7 +415,8 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
           {candidates.length ? (
             <ul className="mt-2 flex flex-wrap gap-1.5">
               {candidates.map((c, i) => (
-                <li key={c.sku} className={`rounded-lg border px-2.5 py-1.5 ${i === 0 ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-800"}`}>
+                <li key={c.sku} {...hover(`sku:${c.sku}`)} className={`rounded-lg border px-2.5 py-1.5 transition ${ring(`sku:${c.sku}`)} ${i === 0 ? "border-gray-900 bg-gray-900 text-white" : "border-gray-200 text-gray-800"}`}>
+                  {placed.has(`sku:${c.sku}`) && <span aria-hidden="true" className="mr-1.5 inline-block h-2.5 w-2.5 rounded-sm border-2 border-sky-400 bg-sky-400/10 align-middle" />}
                   <span className="font-mono text-sm font-semibold">{c.sku}</span>
                   {c.brand_hint && <span className={`ml-1.5 text-[11px] ${i === 0 ? "text-white/70" : "text-gray-500"}`}>{c.brand_hint}</span>}
                   {c.how && c.how !== "pattern" && <span className={`ml-1 text-[10px] ${i === 0 ? "text-white/60" : "text-gray-400"}`}>({c.how})</span>}
@@ -309,7 +440,7 @@ function LabelScan({ output, url, running, skipped }: { output: Json | null; url
           {Object.keys(sizes).filter((k) => k !== "US_gender").length ? (
             <dl className="mt-2 grid grid-cols-4 gap-2">
               {["US", "UK", "EUR", "CM"].filter((k) => sizes[k] !== undefined).map((k) => (
-                <div key={k} className="rounded-lg border border-gray-200 px-2 py-1.5 text-center">
+                <div key={k} {...hover(`size:${k}`)} className={`rounded-lg border px-2 py-1.5 text-center transition ${ring(`size:${k}`)} ${placed.has(`size:${k}`) ? "border-amber-300" : "border-gray-200"}`}>
                   <dt className="font-mono text-[10px] text-gray-400">{k}</dt>
                   <dd className="text-sm font-semibold text-gray-900">{String(sizes[k])}</dd>
                 </div>

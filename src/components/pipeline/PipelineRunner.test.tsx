@@ -207,6 +207,62 @@ describe("PipelineRunner", () => {
     expect(label).toHaveAttribute("src", "https://img.test/label.jpg");
     fireEvent.click(screen.getByRole("button", { name: "Preprocessed" }));
     expect(label.getAttribute("style")).toContain("grayscale(1)");
+    // An older run has no positions: nothing is drawn, and it says why
+    expect(screen.queryAllByTestId("label-region")).toHaveLength(0);
+    expect(screen.getByText(/This run predates label boxes/)).toBeInTheDocument();
+  });
+
+  it("draws a box where each finding was read on the label", async () => {
+    vi.mocked(getPipelineRunState).mockResolvedValue(runState({
+      status: "completed",
+      stages: stages(Array(7).fill("done"), {
+        3: {
+          output: {
+            barcodes: [{ code: "0195193123459", format: "EAN-13", checksum_valid: true, box: [0.1, 0.64, 0.35, 0.13] }],
+            sku_candidates: [{ sku: "DD1391-100", brand_hint: "Nike/Jordan", how: "pattern" }],
+            sizes: { US: 10, UK: 9 },
+            size_consistency: "consistent",
+            visible_text: [],
+            image_size: [1100, 1400],
+            regions: [
+              { kind: "barcode", label: "0195193123459", box: [0.1, 0.64, 0.35, 0.13], confidence: null },
+              { kind: "sku", label: "DD1391-100", box: [0.07, 0.5, 0.4, 0.05], confidence: 0.91 },
+              { kind: "size", label: "US 10", box: [0.07, 0.2, 0.2, 0.05], confidence: 0.88 },
+            ],
+            words: [
+              { text: "NIKE", confidence: 0.95, box: [0.07, 0.08, 0.2, 0.05] },
+              { text: "VIETNAM", confidence: 0.4, box: [0.3, 0.7, 0.3, 0.05] },
+            ],
+            ocr_backend: "tesseract",
+            ocr_available: true,
+          },
+        },
+      }),
+    }));
+    await renderRunner({ initialRunId: "run-2" });
+    fireEvent.click(await screen.findByRole("button", { name: /^3\. Label reader: Done/ }));
+
+    const boxes = screen.getAllByTestId("label-region");
+    expect(boxes.map((b) => b.dataset.kind)).toEqual(["barcode", "sku", "size"]);
+    expect(boxes[1]).toHaveStyle({ left: "7%", top: "50%", width: "40%", height: "5%" });
+    expect(within(boxes[1]).getByText(/SKU DD1391-100/)).toBeInTheDocument();
+    expect(within(boxes[1]).getByText("0.91")).toBeInTheDocument();
+    // The frame takes the photo's proportions so the boxes line up
+    expect(screen.getByAltText("Label photo").parentElement).toHaveStyle({ aspectRatio: "1100 / 1400" });
+    // UK 9 was read but has no box
+    expect(screen.getByText(/1 finding read but not located/)).toBeInTheDocument();
+
+    // Hovering a finding in the panel highlights its box
+    fireEvent.mouseEnter(screen.getByText("DD1391-100").closest("li")!);
+    expect(boxes[1].className).toContain("shadow-");
+    expect(boxes[0].className).not.toContain("shadow-");
+
+    // OCR word boxes are a separate layer, off until asked for
+    expect(screen.queryAllByTestId("label-word")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: /OCR words/ }));
+    expect(screen.getAllByTestId("label-word")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: /Boxes/ }));
+    expect(screen.queryAllByTestId("label-region")).toHaveLength(0);
   });
 
   it("marks quality check verdicts on each photo", async () => {
