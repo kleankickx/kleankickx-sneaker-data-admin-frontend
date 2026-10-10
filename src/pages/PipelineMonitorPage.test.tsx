@@ -273,4 +273,36 @@ describe("PipelineRunPage", () => {
     expect(screen.getByText("3.0 s")).toBeInTheDocument();
     expect(screen.getByText("Vision model raw JSON")).toBeInTheDocument();
   });
+
+  it("opens a run that stopped before fusion, with no final result", async () => {
+    const stage = (n: number, name: string, status: string) => ({
+      stage: n, name, status, summary: "", output: null, error: "",
+      duration_ms: status === "done" ? 100 : null, started_at: null, finished_at: null, reused_from_run: null,
+    });
+    vi.mocked(getPipelineRun).mockResolvedValue({
+      id: "run-2", sneaker_pair: "pair-1", sneaker_pair_id: "KKX-PAIR-00000001",
+      result: null, regions: [], prompt_version: "fdc-v2", provider: "openai", model_name: "",
+      vlm_used: false, vlm_error: "", duration_ms: 900, created_at: "2026-10-10T10:00:00Z",
+      debug: {}, raw_response: null, job_status: null, status: "completed", is_test: true, notes: [],
+      stages: [
+        stage(1, "Load photos", "done"), stage(2, "Quality check", "done"), stage(3, "Label reader", "done"),
+        stage(4, "Catalog lookup", "waiting"), stage(5, "Vision model", "waiting"),
+        stage(6, "Fusion", "waiting"), stage(7, "Save & route", "waiting"),
+      ],
+      qc_ok: true, barcode_decoded: true, sku_source: "none",
+      catalog_hit: false, size_found: false, size_consistent: false,
+    } as unknown as PipelineRunDetail);
+
+    render(
+      <MemoryRouter initialEntries={["/pipeline-monitor/runs/run-2"]}>
+        <Routes>
+          <Route path="/pipeline-monitor/runs/:runId" element={<PipelineRunPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("This run stopped after stage 3, before fusion, so there's no final result.")).toBeInTheDocument();
+    expect(screen.getAllByText(/Label reader/).length).toBeGreaterThan(0);
+    expect(screen.getByText("The vision model wasn't used for this run.")).toBeInTheDocument();
+  });
 });
