@@ -246,46 +246,11 @@ export default function PipelineRunPage() {
 
             <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-semibold text-gray-900">Final result</h2>
-              <table className="mt-3 w-full">
-                <thead className="border-b border-gray-100">
-                  <tr>
-                    {["Field", "Value", "Confidence", "Evidence"].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                  {(["brand", "model", "sku", "size", "colorway", "condition"] as const).map((f) => {
-                    const field = run.result[f];
-                    return (
-                      <tr key={f}>
-                        <td className="px-3 py-2 text-gray-600">{FIELD_LABELS[f]}</td>
-                        <td className="px-3 py-2 font-medium text-gray-900">{field.value ?? "—"}</td>
-                        <td className={`px-3 py-2 tabular-nums ${field.confidence < 0.8 ? "text-amber-700" : "text-gray-700"}`}>
-                          {field.confidence.toFixed(2)}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">{field.evidence}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {run.result.materials.length > 0 && (
-                <>
-                  <h3 className="mt-5 text-sm font-medium text-gray-700">Materials</h3>
-                  <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
-                    {run.result.materials.map((m, i) => (
-                      <li key={i}>{m.material} ({m.confidence.toFixed(2)}): {m.evidence}</li>
-                    ))}
-                  </ul>
-                </>
+              {run.result ? (
+                <FinalResult result={run.result} />
+              ) : (
+                <p className="mt-3 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">{noResultReason(run)}</p>
               )}
-
-              <h3 className="mt-5 text-sm font-medium text-gray-700">Limitations</h3>
-              <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
-                {run.result.limitations.map((l) => <li key={l}>{l}</li>)}
-              </ul>
 
               <details className="mt-5">
                 <summary className="cursor-pointer text-sm font-medium text-gray-700">Vision model raw JSON</summary>
@@ -304,5 +269,66 @@ export default function PipelineRunPage() {
         )}
       </main>
     </div>
+  );
+}
+
+/* Why a run has no final result yet. */
+function noResultReason(run: PipelineRunDetail) {
+  const fusion = run.stages?.find((s) => s.stage === 6);
+  if (run.status === "failed") return "This run failed before producing a result. See the steps above for where it stopped.";
+  if (run.status === "queued" || run.status === "running") return "This run is still in progress.";
+  if (run.status === "waiting") return "This run is paused between steps. Open it in the runner to continue.";
+  if (fusion && fusion.status === "waiting") {
+    const last = Math.max(0, ...run.stages.filter((s) => s.status !== "waiting" && s.status !== "skipped").map((s) => s.stage));
+    return `This run stopped after stage ${last}, before fusion, so there's no final result.`;
+  }
+  return "No final result was recorded for this run.";
+}
+
+function FinalResult({ result }: { result: NonNullable<PipelineRunDetail["result"]> }) {
+  return (
+    <>
+      <table className="mt-3 w-full">
+        <thead className="border-b border-gray-100">
+          <tr>
+            {["Field", "Value", "Confidence", "Evidence"].map((h) => (
+              <th key={h} className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-gray-500">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 text-sm">
+          {(["brand", "model", "sku", "size", "colorway", "condition"] as const).map((f) => {
+            const field = result[f];
+            if (!field) return null;
+            return (
+              <tr key={f}>
+                <td className="px-3 py-2 text-gray-600">{FIELD_LABELS[f]}</td>
+                <td className="px-3 py-2 font-medium text-gray-900">{field.value ?? "—"}</td>
+                <td className={`px-3 py-2 tabular-nums ${field.confidence < 0.8 ? "text-amber-700" : "text-gray-700"}`}>
+                  {field.confidence.toFixed(2)}
+                </td>
+                <td className="px-3 py-2 text-xs text-gray-600">{field.evidence}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+
+      {(result.materials ?? []).length > 0 && (
+        <>
+          <h3 className="mt-5 text-sm font-medium text-gray-700">Materials</h3>
+          <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
+            {result.materials.map((m, i) => (
+              <li key={i}>{m.material} ({m.confidence.toFixed(2)}): {m.evidence}</li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h3 className="mt-5 text-sm font-medium text-gray-700">Limitations</h3>
+      <ul className="mt-1 list-disc pl-5 text-sm text-gray-700">
+        {(result.limitations ?? []).map((l) => <li key={l}>{l}</li>)}
+      </ul>
+    </>
   );
 }

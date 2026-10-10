@@ -1131,7 +1131,10 @@ export interface RunStage {
   output: Record<string, unknown>;
 }
 
-export interface PipelineRunDetail extends AnalysisRun {
+export interface PipelineRunDetail extends Omit<AnalysisRun, "result"> {
+  /* Null until the run reaches fusion (stage 6): a run stopped earlier,
+     a failed or stepped run, or one still running. */
+  result: AnalysisRun["result"] | null;
   debug: {
     stages?: RunStage[];
     sku_trace?: string[];
