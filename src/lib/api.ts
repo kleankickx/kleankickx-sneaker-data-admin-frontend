@@ -392,6 +392,8 @@ export interface BatchDetailsParams {
   condition?: string;
   brand?: string;
   ordering?: string;
+  /** Required images uploaded, e.g. "6" or "4,5". */
+  images?: string;
 }
 
 export async function getBatchDetails(
@@ -405,6 +407,62 @@ export async function getBatchDetails(
   });
 
   return response.data.data;
+}
+
+/* ============================================================
+   BATCH SUMMARY + EXPORT
+   ============================================================ */
+
+export interface BatchSummary {
+  batch_id: string;
+  name: string;
+  expected_quantity: number;
+  total_pairs: number;
+  complete_pairs: number;
+  pairs_without_images: number;
+  required_images: number;
+  total_images: number;
+  by_image_count: { images: number; pairs: number; percent: number }[];
+  missing_by_angle: { angle: string; pairs: number }[];
+  by_status: { status: string; label: string; pairs: number }[];
+  by_condition: { condition: string; pairs: number }[];
+  with_sku: number;
+  with_brand_and_model: number;
+}
+
+export async function getBatchSummary(batchId: string): Promise<BatchSummary> {
+  const response = await api.get<ApiResponse<BatchSummary>>(
+    `/batches/${batchId}/summary/`,
+  );
+  return response.data.data;
+}
+
+export type BatchExportFile = "xlsx" | "csv";
+
+/** Downloads the batch's pairs (with the list's filters) as a file. */
+export async function downloadBatchExport(
+  batchId: string,
+  file: BatchExportFile,
+  filters: Omit<BatchDetailsParams, "page" | "page_size" | "ordering"> = {},
+): Promise<string> {
+  const response = await api.get<Blob>(`/batches/${batchId}/export/`, {
+    params: { file, ...filters },
+    responseType: "blob",
+    timeout: 120000,
+  });
+  const disposition = String(response.headers["content-disposition"] ?? "");
+  const name =
+    /filename="?([^";]+)"?/.exec(disposition)?.[1] ?? `batch-${batchId}.${file}`;
+
+  const url = URL.createObjectURL(response.data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return name;
 }
 
 /* ============================================================

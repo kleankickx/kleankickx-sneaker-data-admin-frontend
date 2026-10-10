@@ -17,15 +17,18 @@ import {
   getBatchDetails,
   getBatchPairsWithoutImages,
   deleteBatchPairsWithoutImages,
+  downloadBatchExport,
   openBatch,
   updateBatch,
   type BatchCleanupJob,
+  type BatchExportFile,
   type BatchDetailsResponse,
   type PairsWithoutImagesPreview,
 } from "../lib/api";
 import { conditionLabel } from "../lib/conditions";
 
 import AddPairModal from "../components/AddPairModal";
+import BatchSummaryPanel from "../components/batches/BatchSummaryPanel";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import EditPairModal from "../components/sneakers/EditPairModal";
@@ -789,7 +792,14 @@ export default function BatchDetailsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [conditionFilter, setConditionFilter] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
+  const [imagesFilter, setImagesFilter] = useState<number | null>(null);
   const [ordering, setOrdering] = useState("-created_at");
+
+  /* Summary + export */
+  const [summaryVersion, setSummaryVersion] = useState(0);
+  const [showExport, setShowExport] = useState(false);
+  const [exporting, setExporting] = useState<BatchExportFile | null>(null);
+  const pairsRef = useRef<HTMLElement>(null);
 
   /* Pagination */
   const [page, setPage] = useState(1);
@@ -842,7 +852,22 @@ export default function BatchDetailsPage() {
   /* Reset pagination when filters change */
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, conditionFilter, brandFilter, ordering]);
+  }, [statusFilter, conditionFilter, brandFilter, imagesFilter, ordering]);
+
+  /* Close export menu on outside click */
+  useEffect(() => {
+    if (!showExport) return;
+
+    function onDocClick() {
+      setShowExport(false);
+    }
+
+    window.addEventListener("click", onDocClick);
+
+    return () => {
+      window.removeEventListener("click", onDocClick);
+    };
+  }, [showExport]);
 
   /* Close actions menu on outside click */
   useEffect(() => {
@@ -898,10 +923,13 @@ export default function BatchDetailsPage() {
         status: statusFilter || undefined,
         condition: conditionFilter || undefined,
         brand: brandFilter || undefined,
+        images: imagesFilter === null ? undefined : String(imagesFilter),
         ordering,
       });
 
       setDetails(data);
+      // Keep the summary in step with uploads, edits and cleanups.
+      setSummaryVersion((version) => version + 1);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -919,6 +947,7 @@ export default function BatchDetailsPage() {
     statusFilter,
     conditionFilter,
     brandFilter,
+    imagesFilter,
     ordering,
   ]);
 
@@ -994,7 +1023,8 @@ export default function BatchDetailsPage() {
     Boolean(searchInput) ||
     Boolean(statusFilter) ||
     Boolean(conditionFilter) ||
-    Boolean(brandFilter);
+    Boolean(brandFilter) ||
+    imagesFilter !== null;
 
   function clearFilters() {
     setSearchInput("");
@@ -1002,8 +1032,41 @@ export default function BatchDetailsPage() {
     setStatusFilter("");
     setConditionFilter("");
     setBrandFilter("");
+    setImagesFilter(null);
     setOrdering("-created_at");
     setPage(1);
+  }
+
+  /* Picking an image count in the summary lists those pairs */
+  function selectImages(images: number | null) {
+    setImagesFilter(images);
+    if (images !== null) {
+      const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      pairsRef.current?.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    }
+  }
+
+  /* Export the batch's pairs, with the list's current filters */
+  async function handleExport(file: BatchExportFile) {
+    if (!batchId) return;
+
+    setShowExport(false);
+    setExporting(file);
+
+    try {
+      const name = await downloadBatchExport(batchId, file, {
+        search: search || undefined,
+        status: statusFilter || undefined,
+        condition: conditionFilter || undefined,
+        brand: brandFilter || undefined,
+        images: imagesFilter === null ? undefined : String(imagesFilter),
+      });
+      showToast("success", `Downloaded ${name}`);
+    } catch (err) {
+      showToast("error", `Export failed: ${getErrorMessage(err)}`);
+    } finally {
+      setExporting(null);
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -1627,8 +1690,17 @@ export default function BatchDetailsPage() {
         </div>
       </section>
 
+      {batchId && (
+        <BatchSummaryPanel
+          batchId={batchId}
+          version={summaryVersion}
+          selected={imagesFilter}
+          onSelect={selectImages}
+        />
+      )}
+
       {/* Sneaker pairs */}
-      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <section ref={pairsRef} className="scroll-mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-6 py-5 sm:px-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -1712,6 +1784,77 @@ export default function BatchDetailsPage() {
                   Clean up
                 </button>
               )}
+
+              {/* Export, with the list's filters */}
+              <div
+                className="relative self-start lg:self-auto"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  disabled={exporting !== null}
+                  onClick={() => setShowExport((current) => !current)}
+                  aria-haspopup="menu"
+                  aria-expanded={showExport}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+                >
+                  <span
+                    className={`material-symbols-outlined text-[18px] ${
+                      exporting ? "animate-spin" : ""
+                    }`}
+                  >
+                    {exporting ? "progress_activity" : "download"}
+                  </span>
+                  {exporting ? "Exporting…" : "Export"}
+                </button>
+
+                {showExport && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-11 z-30 w-72 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-xl"
+                  >
+                    <p className="border-b border-gray-100 px-4 py-2 text-xs text-gray-500">
+                      {hasFilters
+                        ? `${details.meta.count.toLocaleString()} pairs matching the filters`
+                        : `All ${details.meta.count.toLocaleString()} pairs in this batch`}
+                    </p>
+                    {[
+                      {
+                        file: "xlsx" as const,
+                        icon: "table_view",
+                        label: "Excel",
+                        hint: "Summary sheet + one row per pair",
+                      },
+                      {
+                        file: "csv" as const,
+                        icon: "description",
+                        label: "CSV",
+                        hint: "One row per pair",
+                      },
+                    ].map((option) => (
+                      <button
+                        key={option.file}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => handleExport(option.file)}
+                        className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-gray-50"
+                      >
+                        <span className="material-symbols-outlined mt-0.5 text-[19px] text-gray-500">
+                          {option.icon}
+                        </span>
+                        <span>
+                          <span className="block text-sm font-medium text-gray-800">
+                            {option.label}
+                          </span>
+                          <span className="block text-xs text-gray-500">
+                            {option.hint}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"
@@ -1820,8 +1963,23 @@ export default function BatchDetailsPage() {
 
           {hasFilters && (
             <div className="mt-3 flex items-center justify-between">
-              <p className="text-xs text-gray-500">
+              <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
                 Filters are applied to the batch dataset.
+                {imagesFilter !== null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-900 py-0.5 pl-2.5 pr-1 text-[11px] font-medium text-white">
+                    {imagesFilter} of 6 images
+                    <button
+                      type="button"
+                      onClick={() => setImagesFilter(null)}
+                      aria-label="Remove image count filter"
+                      className="flex h-4 w-4 items-center justify-center rounded-full hover:bg-white/20"
+                    >
+                      <span className="material-symbols-outlined text-[13px]">
+                        close
+                      </span>
+                    </button>
+                  </span>
+                )}
               </p>
 
               <button
