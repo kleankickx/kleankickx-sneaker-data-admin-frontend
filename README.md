@@ -1,4 +1,17 @@
-# React + TypeScript + Vite
+# KleanKickx Sneaker Data Admin
+
+The admin for the Sneaker Data Platform: batches, verification, the
+analysis pipeline, and settings (users, roles, audit log).
+
+- **Guide:** in the backend repo,
+  [docs/](https://github.com/kleankickx/Sneaker-Data-Platform-Backend/tree/main/docs):
+  the pipeline, users and access, and operations.
+- **Config:** `VITE_API_BASE_URL`, the backend API, e.g. `https://<backend>/api/v1`.
+- **Commands:** `npm run dev`, `npm test`, `npm run build`.
+
+---
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
