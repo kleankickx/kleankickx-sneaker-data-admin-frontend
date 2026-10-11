@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { CodeInput } from "../components/access/CodeInput";
 import MfaEnrollment from "../components/access/MfaEnrollment";
 import PasswordForm from "../components/access/PasswordForm";
+import ProfileForm from "../components/access/ProfileForm";
 import { RecoveryCodes } from "../components/access/SecretReveal";
 import {
   disableMfa,
@@ -98,11 +99,9 @@ export default function AccountPage() {
       )}
 
       <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
-        <Section title="Profile" description="Ask an administrator to change your details or roles.">
-          <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-y-2 text-sm">
-            <dt className="text-gray-500">Name</dt><dd className="text-gray-900">{user.name || "—"}</dd>
-            <dt className="text-gray-500">Username</dt><dd className="font-mono text-gray-900">{user.username}</dd>
-            <dt className="text-gray-500">Email</dt><dd className="text-gray-900">{user.email || "—"}</dd>
+        <Section title="Profile" description="Your name and email. An administrator changes your username and roles.">
+          <ProfileForm user={user} onSaved={setUser} />
+          <dl className="mt-6 grid grid-cols-[120px_minmax(0,1fr)] gap-y-2 border-t border-gray-100 pt-5 text-sm">
             <dt className="text-gray-500">Roles</dt>
             <dd className="flex flex-wrap gap-1.5">
               {user.is_superuser && <span className="rounded-full bg-gray-900 px-2.5 py-0.5 text-xs font-medium text-white">Superuser</span>}

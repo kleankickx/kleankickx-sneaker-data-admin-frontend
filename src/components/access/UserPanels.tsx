@@ -219,7 +219,12 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
 }) {
   const { user: me, can } = useAuth();
   const [user, setUser] = useState(initial);
-  const [details, setDetails] = useState({ first_name: initial.first_name, last_name: initial.last_name, email: initial.email });
+  const [details, setDetails] = useState({
+    username: initial.username,
+    first_name: initial.first_name,
+    last_name: initial.last_name,
+    email: initial.email,
+  });
   const [roleIds, setRoleIds] = useState(initial.roles.map((r) => r.id));
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [tempPassword, setTempPassword] = useState("");
@@ -245,6 +250,7 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
 
   function done(next: ManagedUser, text: string) {
     setUser(next);
+    setDetails({ username: next.username, first_name: next.first_name, last_name: next.last_name, email: next.email });
     setRoleIds(next.roles.map((r) => r.id));
     onChanged(next);
     setMessage({ tone: "ok", text });
@@ -262,7 +268,20 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
     }
   }
 
-  const saveDetails = () => run("details", async () => done(await updateUser(user.id, details), "Details saved."));
+  const saveDetails = () => {
+    // Only what changed, so an untouched email or username is never re-checked.
+    const changes = Object.fromEntries(
+      (Object.keys(details) as (keyof typeof details)[])
+        .filter((key) => details[key].trim() !== user[key])
+        .map((key) => [key, details[key].trim()]),
+    );
+    if (changes.username && !window.confirm(
+      `Rename ${user.username} to ${changes.username}? They'll be signed out and sign in with the new username.`,
+    )) return;
+    run("details", async () =>
+      done(await updateUser(user.id, changes), changes.username ? "Saved. They've been signed out and use the new username from now on." : "Details saved."),
+    );
+  };
   const saveRoles = () => run("roles", async () => done(await updateUser(user.id, { role_ids: roleIds }), "Roles saved. They've been signed out so the change applies."));
 
   function action(name: UserAction | "reset-password", text: string) {
@@ -279,8 +298,9 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
   }
 
   const rolesChanged = roleIds.slice().sort().join() !== user.roles.map((r) => r.id).sort().join();
-  const detailsChanged =
-    details.first_name !== user.first_name || details.last_name !== user.last_name || details.email !== user.email;
+  const detailsChanged = (Object.keys(details) as (keyof typeof details)[]).some(
+    (key) => details[key].trim() !== user[key],
+  );
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/30" role="dialog" aria-modal="true" aria-label={`User ${user.username}`}>
@@ -310,6 +330,13 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
           <section>
             <h3 className="text-sm font-semibold text-gray-900">Details</h3>
             <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="col-span-2">
+                <input aria-label="Username" value={details.username} disabled={locked || isMe} autoCapitalize="none" spellCheck={false}
+                  onChange={(e) => setDetails({ ...details, username: e.target.value })} className={`${field} font-mono`} placeholder="Username" />
+                <p className="mt-1 text-xs text-gray-500">
+                  {isMe ? "Another administrator can change your username." : "Changing it signs them out; they sign in with the new one."}
+                </p>
+              </div>
               <input aria-label="First name" value={details.first_name} disabled={locked} onChange={(e) => setDetails({ ...details, first_name: e.target.value })} className={field} placeholder="First name" />
               <input aria-label="Last name" value={details.last_name} disabled={locked} onChange={(e) => setDetails({ ...details, last_name: e.target.value })} className={field} placeholder="Last name" />
               <input aria-label="Email" type="email" value={details.email} disabled={locked} onChange={(e) => setDetails({ ...details, email: e.target.value })} className={`${field} col-span-2`} placeholder="Email" />

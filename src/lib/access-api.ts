@@ -104,6 +104,17 @@ export async function changePassword(currentPassword: string, newPassword: strin
   return response.data.data.user;
 }
 
+/** Your own name, and email (needs your current password). */
+export async function updateMyProfile(input: {
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  current_password?: string;
+}): Promise<AuthUser> {
+  const response = await api.patch("/auth/me/", input);
+  return response.data.data;
+}
+
 export async function signOutEverywhere(): Promise<void> {
   await api.post("/auth/sessions/revoke/");
 }

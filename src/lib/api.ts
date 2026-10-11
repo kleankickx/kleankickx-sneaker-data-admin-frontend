@@ -42,6 +42,8 @@ export interface AuthUser {
   id: string | number;
   email: string;
   name?: string;
+  first_name?: string;
+  last_name?: string;
   username?: string;
   /* First role, for display; roles has them all. */
   role?: string;
