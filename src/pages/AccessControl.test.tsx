@@ -13,13 +13,16 @@ import {
   getRole,
   listRoles,
   listUsers,
+  updateMyProfile,
   updateRole,
+  updateUser,
   verifyLoginCode,
   type ManagedUser,
   type Role,
 } from "../lib/access-api";
 import type { AuthUser } from "../lib/api";
 import ProtectedRoute from "../lib/protected-route";
+import AccountPage from "./AccountPage";
 import LoginPage from "./LoginPage";
 import RolesPage from "./RolesPage";
 import UsersPage from "./UsersPage";
@@ -32,6 +35,8 @@ vi.mock("../lib/access-api", async (importOriginal) => ({
   getRole: vi.fn(),
   createUser: vi.fn(),
   updateRole: vi.fn(),
+  updateUser: vi.fn(),
+  updateMyProfile: vi.fn(),
   getPermissionCatalog: vi.fn(),
   listAuditEvents: vi.fn().mockResolvedValue({ results: [], count: 0 }),
 }));
@@ -199,6 +204,48 @@ describe("users", () => {
 
     await waitFor(() => expect(createUser).toHaveBeenCalledWith(expect.objectContaining({ username: "ama", role_ids: [2] })));
     expect(await screen.findByTestId("one-time-secret")).toHaveTextContent("kQ7v-2Lxp-9TfA-mW3c");
+  });
+});
+
+describe("profile", () => {
+  it("lets you change your name, and asks for your password to change your email", async () => {
+    signIn(["view_batches"], { first_name: "Esi", last_name: "", email: "esi@example.com" });
+    vi.mocked(updateMyProfile).mockResolvedValue({ ...auth.user!, first_name: "Esi", last_name: "Owusu" });
+    render(<MemoryRouter><AccountPage /></MemoryRouter>);
+
+    expect(screen.getByLabelText("Username")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Last name"), { target: { value: "Owusu" } });
+    // (The change-password form below has its own "Current password")
+    expect(document.getElementById("profile-password")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save details" }));
+
+    // Only the changed field is sent
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalledWith({ last_name: "Owusu" }));
+    expect(auth.setUser).toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "new@example.com" } });
+    const save = screen.getByRole("button", { name: "Save details" });
+    expect(save).toBeDisabled();                                  // needs the password
+    fireEvent.change(document.getElementById("profile-password")!, { target: { value: "pw" } });
+    fireEvent.click(save);
+    await waitFor(() => expect(updateMyProfile).toHaveBeenLastCalledWith(
+      expect.objectContaining({ email: "new@example.com", current_password: "pw" }),
+    ));
+  });
+
+  it("lets an administrator rename someone else", async () => {
+    signIn(["manage_users", "view_batches", "view_pipeline"]);
+    vi.mocked(updateUser).mockResolvedValue({ ...USER, username: "kojo.mensah" });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<MemoryRouter><UsersPage /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByText("Kojo"));
+    const panel = screen.getByRole("dialog", { name: "User kojo" });
+    fireEvent.change(within(panel).getByLabelText("Username"), { target: { value: "kojo.mensah" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Save details" }));
+
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith("u2", { username: "kojo.mensah" }));
+    expect(await within(panel).findByText(/signed out and use the new username/)).toBeInTheDocument();
   });
 });
 

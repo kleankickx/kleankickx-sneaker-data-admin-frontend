@@ -24,6 +24,10 @@ function describe(details: Record<string, unknown>) {
   if (details.added && list(details.added)) parts.push(`added ${list(details.added)}`);
   if (details.removed && list(details.removed)) parts.push(`removed ${list(details.removed)}`);
   if (details.roles && list(details.roles)) parts.push(`roles ${list(details.roles)}`);
+  if (details.from !== undefined && details.to !== undefined) parts.push(`${String(details.from)} → ${String(details.to)}`);
+  if (details.changes && typeof details.changes === "object") {
+    parts.push(`changed ${Object.keys(details.changes).map((k) => k.replace("_", " ")).join(", ")}`);
+  }
   if (details.method) parts.push(String(details.method).replace("mfa_", "two-factor ").replace("_", " "));
   if (details.reason) parts.push(String(details.reason).replace("_", " "));
   return parts.join(" · ");
