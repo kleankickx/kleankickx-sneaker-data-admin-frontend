@@ -32,6 +32,7 @@ import BatchSummaryPanel from "../components/batches/BatchSummaryPanel";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import EditPairModal from "../components/sneakers/EditPairModal";
+import { useAuth } from "../lib/auth-context";
 import { useBulkUpload } from "../lib/bulk-upload-store";
 
 import type { SneakerPair } from "../lib/types";
@@ -778,6 +779,7 @@ function BatchCleanupModal({
 export default function BatchDetailsPage() {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
+  const { can } = useAuth();
 
   /* Data state */
   const [details, setDetails] =
@@ -1511,7 +1513,7 @@ export default function BatchDetailsPage() {
 
             {/* Actions */}
             <div
-              className="relative flex shrink-0 gap-2"
+              className={`relative flex shrink-0 gap-2 ${can("manage_batches") ? "" : "hidden"}`}
               onClick={(event) => event.stopPropagation()}
             >
               <button
@@ -1721,7 +1723,7 @@ export default function BatchDetailsPage() {
 
             <div className="flex shrink-0 gap-2">
               {/* Add pair — only for open batches */}
-              {batch.status.toLowerCase() === "open" && (
+              {batch.status.toLowerCase() === "open" && can("capture_pairs") && (
                 <button
                   type="button"
                   onClick={() => setShowAddPair(true)}
@@ -1735,7 +1737,7 @@ export default function BatchDetailsPage() {
               )}
 
               {/* Bulk upload — only for open batches */}
-              {batch.status.toLowerCase() === "open" && (
+              {batch.status.toLowerCase() === "open" && can("capture_pairs") && (
                 <button
                   type="button"
                   onClick={() => setShowBulkUpload(true)}
@@ -1749,7 +1751,7 @@ export default function BatchDetailsPage() {
               )}
 
               {/* Clean up / Cleanup running */}
-              {isCleanupJobActive(cleanupJob) ? (
+              {!can("manage_batches") ? null : isCleanupJobActive(cleanupJob) ? (
                 <button
                   type="button"
                   onClick={openCleanup}
@@ -1787,7 +1789,7 @@ export default function BatchDetailsPage() {
 
               {/* Export, with the list's filters */}
               <div
-                className="relative self-start lg:self-auto"
+                className={`relative self-start lg:self-auto ${can("export_batches") ? "" : "hidden"}`}
                 onClick={(event) => event.stopPropagation()}
               >
                 <button
@@ -2210,7 +2212,7 @@ export default function BatchDetailsPage() {
                           </td>
 
                           <td className="whitespace-nowrap px-4 py-4 text-right">
-                            <div className="inline-flex gap-1">
+                            <div className={`inline-flex gap-1 ${can("edit_pairs") ? "" : "hidden"}`}>
                               <button
                                 type="button"
                                 onClick={() => setEditingPair(pair)}

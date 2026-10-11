@@ -19,11 +19,16 @@ const API_BASE_URL =
    AXIOS INSTANCE
    ============================================================ */
 
+/* The API refuses cookie-authenticated writes without X-Requested-With
+   (a CSRF defence: other sites can't add it without CORS approval). */
+const CLIENT_HEADERS = {
+  "Content-Type": "application/json",
+  "X-Requested-With": "XMLHttpRequest",
+};
+
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: CLIENT_HEADERS,
   timeout: 30000,
   /* Send cookies on every request. Required for httpOnly auth. */
   withCredentials: true,
@@ -38,9 +43,17 @@ export interface AuthUser {
   email: string;
   name?: string;
   username?: string;
+  /* First role, for display; roles has them all. */
   role?: string;
-  /* Staff see the pipeline monitor. */
+  roles?: string[];
+  /* App permission codenames (see access-api Permission). */
+  permissions?: string[];
+  is_superuser?: boolean;
   is_staff?: boolean;
+  must_change_password?: boolean;
+  mfa_enabled?: boolean;
+  /* One of the user's roles requires two-factor. */
+  mfa_required?: boolean;
 }
 
 export type ApiErrorCode =
@@ -56,6 +69,10 @@ export type ApiErrorCode =
   | "method_not_allowed"
   | "conflict"
   | "rate_limit_exceeded"
+  | "account_locked"
+  | "password_change_required"
+  | "mfa_invalid"
+  | "mfa_token_invalid"
   | "server_error"
   | "api_error";
 
@@ -72,7 +89,7 @@ async function refreshSession(): Promise<boolean> {
       {},
       {
         withCredentials: true,
-        headers: { "Content-Type": "application/json" },
+        headers: CLIENT_HEADERS,
       },
     );
     return true;
@@ -112,8 +129,15 @@ api.interceptors.response.use(
       | undefined;
 
     const url = String(original?.url ?? "");
+
+    /* On a temporary password: send the user to change it. */
+    if (status === 403 && code === "password_change_required" && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("kkx:password-change-required"));
+    }
+
     const isAuthEndpoint =
       url.includes("/auth/login/") ||
+      url.includes("/auth/mfa/") ||
       url.includes("/auth/logout/") ||
       url.includes("/auth/token/refresh/") ||
       url.includes("/auth/me/");

@@ -18,7 +18,7 @@ import SneakerDetailsPage from "./SneakerDetailsPage";
 
 // A verifier, not staff: the pipeline runner stays hidden.
 vi.mock("../lib/auth-context", () => ({
-  useAuth: () => ({ user: { id: "u1", email: "v@example.com", is_staff: false } }),
+  useAuth: () => ({ user: { id: "u1", email: "v@example.com", permissions: ["view_batches"] }, can: () => false }),
 }));
 
 vi.mock("../lib/api", async (importOriginal) => ({
