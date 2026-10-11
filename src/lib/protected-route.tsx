@@ -2,6 +2,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
+import ForcePasswordChange from "../components/access/ForcePasswordChange";
 import { useAuth } from "./auth-context";
 
 export default function ProtectedRoute({
@@ -44,6 +45,11 @@ export default function ProtectedRoute({
         replace
       />
     );
+  }
+
+  /* A temporary password must be replaced before anything else. */
+  if (user.must_change_password) {
+    return <ForcePasswordChange />;
   }
 
   return <>{children}</>;

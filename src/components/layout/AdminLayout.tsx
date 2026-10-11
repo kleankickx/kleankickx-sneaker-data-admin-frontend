@@ -6,6 +6,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import type { Permission } from "../../lib/access-api";
 import { useAuth } from "../../lib/auth-context";
 import UploadPanel from "../bulk/UploadPanel";
 
@@ -13,25 +14,23 @@ type NavigationItem = {
   name: string;
   path: string;
   icon: string;
-  staffOnly?: boolean;
+  /* Shown to users holding any of these. */
+  permissions: Permission[];
 };
 
 const navigation: NavigationItem[] = [
-  { name: "Dashboard", path: "/", icon: "dashboard" },
-  { name: "Batches", path: "/batches", icon: "inventory_2" },
-  { name: "Sneakers", path: "/sneakers", icon: "steps" },
-  {
-    name: "Verification",
-    path: "/verification",
-    icon: "fact_check",
-  },
-  { name: "Review queue", path: "/review-queue", icon: "rule" },
-  {
-    name: "Pipeline monitor",
-    path: "/pipeline-monitor",
-    icon: "monitoring",
-    staffOnly: true,
-  },
+  { name: "Dashboard", path: "/", icon: "dashboard", permissions: ["view_batches"] },
+  { name: "Batches", path: "/batches", icon: "inventory_2", permissions: ["view_batches"] },
+  { name: "Sneakers", path: "/sneakers", icon: "steps", permissions: ["view_batches"] },
+  { name: "Verification", path: "/verification", icon: "fact_check", permissions: ["verify_pairs"] },
+  { name: "Review queue", path: "/review-queue", icon: "rule", permissions: ["verify_pairs"] },
+  { name: "Pipeline monitor", path: "/pipeline-monitor", icon: "monitoring", permissions: ["view_pipeline"] },
+];
+
+const settings: NavigationItem[] = [
+  { name: "Users", path: "/settings/users", icon: "group", permissions: ["manage_users"] },
+  { name: "Roles", path: "/settings/roles", icon: "admin_panel_settings", permissions: ["manage_roles", "manage_users"] },
+  { name: "Audit log", path: "/settings/audit-log", icon: "history", permissions: ["view_audit_log"] },
 ];
 
 function MaterialIcon({
@@ -60,8 +59,30 @@ function SidebarContent({
 }: {
   onNavigate?: () => void;
 }) {
-  const { user } = useAuth();
-  const items = navigation.filter((item) => !item.staffOnly || user?.is_staff);
+  const { can } = useAuth();
+  const items = navigation.filter((item) => item.permissions.some(can));
+  const settingsItems = settings.filter((item) => item.permissions.some(can));
+
+  const link = (item: NavigationItem) => (
+    <NavLink
+      key={item.path}
+      to={item.path}
+      end={item.path === "/"}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        [
+          "flex items-center gap-3 rounded-lg px-3 py-2.5",
+          "text-sm font-medium transition-colors",
+          isActive
+            ? "bg-gray-900 text-white"
+            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+        ].join(" ")
+      }
+    >
+      <MaterialIcon name={item.icon} className="text-[20px]" />
+      <span>{item.name}</span>
+    </NavLink>
+  );
 
   return (
     <>
@@ -84,32 +105,16 @@ function SidebarContent({
           Workspace
         </p>
 
-        <div className="space-y-1">
-          {items.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === "/"}
-              onClick={onNavigate}
-              className={({ isActive }) =>
-                [
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5",
-                  "text-sm font-medium transition-colors",
-                  isActive
-                    ? "bg-gray-900 text-white"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
-                ].join(" ")
-              }
-            >
-              <MaterialIcon
-                name={item.icon}
-                className="text-[20px]"
-              />
+        <div className="space-y-1">{items.map(link)}</div>
 
-              <span>{item.name}</span>
-            </NavLink>
-          ))}
-        </div>
+        {settingsItems.length > 0 && (
+          <>
+            <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+              Settings
+            </p>
+            <div className="space-y-1">{settingsItems.map(link)}</div>
+          </>
+        )}
       </nav>
 
       {/* Sidebar footer */}
@@ -338,7 +343,7 @@ export default function AdminLayout() {
                 </p>
 
                 <p className="text-[11px] text-gray-500">
-                  {user?.role || "Administrator"}
+                  {user?.is_superuser ? "Superuser" : user?.roles?.join(", ") || user?.role || "No role"}
                 </p>
               </div>
 
@@ -359,6 +364,18 @@ export default function AdminLayout() {
                     {user?.email || (user as any)?.username || ""}
                   </p>
                 </div>
+
+                <NavLink
+                  to="/account"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <MaterialIcon name="manage_accounts" className="text-[19px]" />
+                  Account &amp; security
+                  {user?.mfa_required && !user?.mfa_enabled && (
+                    <span className="ml-auto h-2 w-2 rounded-full bg-amber-500" aria-label="Action needed" />
+                  )}
+                </NavLink>
 
                 <button
                   type="button"

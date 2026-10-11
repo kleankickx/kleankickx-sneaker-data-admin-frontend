@@ -9,24 +9,32 @@ import {
 } from "react";
 
 import {
-  login as loginRequest,
   logout as logoutRequest,
   restoreSession,
   type AuthUser,
 } from "./api";
+import { startLogin, type LoginStep, type Permission } from "./access-api";
 
 interface AuthContextValue {
   user: AuthUser | null;
   initializing: boolean;
   sessionExpired: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /* Password step. Resolves to "done" when signed in, or the two-factor
+     step the server asks for next. */
+  login: (username: string, password: string) => Promise<LoginStep>;
+  /* Finish signing in after the two-factor step. */
+  completeLogin: (user: AuthUser) => void;
+  /* Replace the signed-in user (after a password or two-factor change). */
+  setUser: (user: AuthUser) => void;
   logout: () => Promise<void>;
+  /* Whether the signed-in user holds a permission (superusers hold all). */
+  can: (permission: Permission) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUserState] = useState<AuthUser | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -39,11 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const me = await restoreSession();
         if (!cancelled) {
-          setUser(me);
+          setUserState(me);
           setSessionExpired(false);
         }
       } catch {
-        if (!cancelled) setUser(null);
+        if (!cancelled) setUserState(null);
       } finally {
         if (!cancelled) setInitializing(false);
       }
@@ -57,40 +65,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* Session expired: the axios interceptor fires this when a token
-     refresh fails. */
+     refresh fails. A temporary password: the server refused a request
+     until it's changed. */
   useEffect(() => {
     function onExpired() {
-      setUser(null);
+      setUserState(null);
       setSessionExpired(true);
+    }
+    function onPasswordChangeRequired() {
+      setUserState((current) => (current ? { ...current, must_change_password: true } : current));
     }
 
     window.addEventListener("kkx:session-expired", onExpired);
+    window.addEventListener("kkx:password-change-required", onPasswordChangeRequired);
 
     return () => {
       window.removeEventListener("kkx:session-expired", onExpired);
+      window.removeEventListener("kkx:password-change-required", onPasswordChangeRequired);
     };
   }, []);
 
-  const login = useCallback(
-    async (email: string, password: string) => {
-      const { user: loggedInUser } = await loginRequest(
-        email,
-        password,
-      );
-      setUser(loggedInUser);
+  const login = useCallback(async (username: string, password: string) => {
+    const step = await startLogin(username, password);
+    if (step.kind === "done") {
+      setUserState(step.user);
       setSessionExpired(false);
-    },
-    [],
-  );
+    }
+    return step;
+  }, []);
+
+  const completeLogin = useCallback((signedIn: AuthUser) => {
+    setUserState(signedIn);
+    setSessionExpired(false);
+  }, []);
+
+  const setUser = useCallback((next: AuthUser) => setUserState(next), []);
 
   const logout = useCallback(async () => {
     try {
       await logoutRequest();
     } finally {
-      setUser(null);
+      setUserState(null);
       setSessionExpired(false);
     }
   }, []);
+
+  const can = useCallback(
+    (permission: Permission) =>
+      Boolean(user && (user.is_superuser || user.permissions?.includes(permission))),
+    [user],
+  );
 
   const value = useMemo(
     () => ({
@@ -98,9 +122,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initializing,
       sessionExpired,
       login,
+      completeLogin,
+      setUser,
       logout,
+      can,
     }),
-    [user, initializing, sessionExpired, login, logout],
+    [user, initializing, sessionExpired, login, completeLogin, setUser, logout, can],
   );
 
   return (

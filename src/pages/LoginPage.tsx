@@ -5,7 +5,15 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
+import { CodeInput } from "../components/access/CodeInput";
+import MfaEnrollment from "../components/access/MfaEnrollment";
+import { verifyLoginCode } from "../lib/access-api";
 import { useAuth } from "../lib/auth-context";
+
+type Step =
+  | { kind: "password" }
+  | { kind: "mfa"; mfaToken: string }
+  | { kind: "mfa_setup"; mfaToken: string };
 
 function getErrorMessage(error: any) {
   return (
@@ -18,7 +26,7 @@ function getErrorMessage(error: any) {
 }
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, completeLogin } = useAuth();
   const navigate = useNavigate();
 
   const [searchParams] = useSearchParams();
@@ -32,6 +40,9 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>({ kind: "password" });
+  const [code, setCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
 
   /* Show a one-time notice when the user was bounced due to an
      expired session. */
@@ -62,12 +73,109 @@ export default function LoginPage() {
     setNotice(null);
 
     try {
-      await login(username.trim(), password);
-      navigate(continueTo, { replace: true });
+      const next = await login(username.trim(), password);
+      if (next.kind === "done") {
+        navigate(continueTo, { replace: true });
+        return;
+      }
+      setPassword("");
+      setStep(next);
+      setSubmitting(false);
     } catch (err) {
       setError(getErrorMessage(err));
       setSubmitting(false);
     }
+  }
+
+  function backToPassword(message?: string) {
+    setStep({ kind: "password" });
+    setCode("");
+    setUseRecovery(false);
+    setError(message ?? null);
+  }
+
+  async function handleCode(event: React.FormEvent) {
+    event.preventDefault();
+    if (step.kind !== "mfa") return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const { user: signedIn } = await verifyLoginCode(step.mfaToken, code);
+      completeLogin(signedIn);
+      navigate(continueTo, { replace: true });
+    } catch (err) {
+      const errCode = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
+      if (errCode === "mfa_token_invalid") {
+        backToPassword(getErrorMessage(err));
+      } else {
+        setError(getErrorMessage(err));
+        setCode("");
+      }
+      setSubmitting(false);
+    }
+  }
+
+  const card = (children: React.ReactNode, title?: string, subtitle?: string) => (
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-900 text-white">
+            <span className="material-symbols-outlined text-[28px]">shield_lock</span>
+          </div>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight text-gray-900">{title}</h1>
+          <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
+        </div>
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-7">{children}</div>
+        <button type="button" onClick={() => backToPassword()}
+          className="mx-auto mt-6 block text-xs font-medium text-gray-500 underline underline-offset-2 hover:text-gray-800">
+          Use a different account
+        </button>
+      </div>
+    </div>
+  );
+
+  if (step.kind === "mfa_setup") {
+    return card(
+      <MfaEnrollment
+        mfaToken={step.mfaToken}
+        onDone={(signedIn) => {
+          completeLogin(signedIn);
+          navigate(continueTo, { replace: true });
+        }}
+      />,
+      "Set up two-factor sign-in",
+      "Your role requires a code from an authenticator app.",
+    );
+  }
+
+  if (step.kind === "mfa") {
+    return card(
+      <form onSubmit={handleCode} className="space-y-5">
+        {error && (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">{error}</div>
+        )}
+        <CodeInput
+          key={useRecovery ? "recovery" : "totp"}
+          value={code}
+          onChange={setCode}
+          label={useRecovery ? "Recovery code" : "Code from your authenticator app"}
+          allowRecovery={useRecovery}
+          autoFocus
+        />
+        <button type="submit" disabled={submitting || (useRecovery ? code.length < 10 : code.length !== 6)}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60">
+          {submitting ? "Checking…" : "Verify"}
+        </button>
+        <button type="button" onClick={() => { setUseRecovery((v) => !v); setCode(""); setError(null); }}
+          className="block w-full text-center text-xs font-medium text-gray-600 underline underline-offset-2">
+          {useRecovery ? "Use your authenticator app instead" : "Lost your phone? Use a recovery code"}
+        </button>
+      </form>,
+      "Two-factor sign-in",
+      useRecovery ? "Enter one of your saved recovery codes." : "Enter the 6-digit code from your authenticator app.",
+    );
   }
 
   return (

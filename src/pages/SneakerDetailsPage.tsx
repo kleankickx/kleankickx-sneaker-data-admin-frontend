@@ -313,8 +313,8 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
 
   const panel = useRef<VerificationPanelHandle>(null);
 
-  // Staff can run the pipeline here; ?runner=<run id> opens a run.
-  const { user } = useAuth();
+  // Users who may run the pipeline can do it here; ?runner=<run id> opens a run.
+  const { can } = useAuth();
   const runnerRunId = new URLSearchParams(location.search).get("runner");
   const [showRunner, setShowRunner] = useState(Boolean(runnerRunId));
   const runnerRef = useRef<HTMLElement>(null);
@@ -556,7 +556,7 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
               Delete
             </button>
 
-            {user?.is_staff && (
+            {can("run_pipeline") && (
               <button
                 type="button"
                 onClick={() => setShowRunner((shown) => !shown)}
@@ -692,7 +692,7 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
           </div>
         </div>
 
-        {user?.is_staff && showRunner && (
+        {can("run_pipeline") && showRunner && (
           <div className="mt-6">
             <PipelineRunner
               ref={runnerRef}
