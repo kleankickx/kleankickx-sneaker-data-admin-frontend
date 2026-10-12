@@ -5,7 +5,7 @@ import {
   identifySneaker,
   startIdentification,
   updateSneaker,
-  type SneakerPairEdit,
+  type SneakerPairUpdate,
   type VerifiedMaterial,
 } from "../../lib/api";
 import { readApiError, type ApiFormError } from "../../lib/api-errors";
@@ -246,7 +246,7 @@ function VerificationField({
   );
 }
 
-/** Materials by region; saved with "Mark as verified". */
+/** Materials by region; saved with "Save changes" or "Mark as verified". */
 function MaterialsEditor({
   materials,
   aiMaterials,
@@ -387,13 +387,14 @@ export default function VerificationPanel({
   const isVerified = status === "verified";
   const step = status in STEPS ? STEPS[status as Step] : null;
   const clean = normalise(values);
-  const changes = (Object.keys(clean) as Field[]).reduce<SneakerPairEdit>(
+  const changes = (Object.keys(clean) as Field[]).reduce<SneakerPairUpdate>(
     (diff, field) =>
       clean[field] !== saved[field] ? { ...diff, [field]: clean[field] } : diff,
     {},
   );
-  const dirty = Object.keys(changes).length > 0;
   const materialsChanged = !sameMaterials(materials, initialMaterials);
+  if (materialsChanged) changes.materials = materials;
+  const dirty = Object.keys(changes).length > 0;
   const graded = clean.condition !== DEFAULT_CONDITION;
   const canVerify =
     !isVerified && blockers.length === 0 && !checkingEligibility && graded;
@@ -499,7 +500,7 @@ export default function VerificationPanel({
             </p>
           </div>
         </div>
-        {(dirty || materialsChanged) && !isVerified && (
+        {dirty && !isVerified && (
           <span className="inline-flex shrink-0 items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/10">
             Unsaved
           </span>
@@ -624,12 +625,6 @@ export default function VerificationPanel({
               </div>
             )}
 
-            {materialsChanged && !step && (
-              <p className="text-xs text-gray-500">
-                Materials are saved when you mark the pair verified.
-              </p>
-            )}
-
             {confirming ? (
               <div className="rounded-xl border border-gray-200 p-4">
                 <p className="text-sm font-medium text-gray-900">
@@ -637,7 +632,7 @@ export default function VerificationPanel({
                 </p>
                 <p className="mt-1 text-sm text-gray-500">
                   The values above
-                  {dirty || materialsChanged ? ", including your unsaved changes," : ""}{" "}
+                  {dirty ? ", including your unsaved changes," : ""}{" "}
                   become the verified record and update the catalog, and the
                   photos are locked.
                 </p>
