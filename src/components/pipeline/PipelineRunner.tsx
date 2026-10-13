@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from "react";
 
 import {
   getPipelineOptions,
@@ -223,15 +223,34 @@ export default function PipelineRunner({
     };
   });
 
-  useEffect(() => {
-    if (!initialRunId) return;
+  /* Bumped by every open/start, so a slow load can't replace a newer run. */
+  const request = useRef(0);
+  const open = useCallback((runId: string) => {
+    const mine = ++request.current;
     // An already finished run isn't news.
-    notified.current = initialRunId;
-    getPipelineRunState(initialRunId).then(
-      (state) => receive.current(state),
-      (err) => setError(readApiError(err, "Couldn't load that run.").message),
+    notified.current = runId;
+    getPipelineRunState(runId).then(
+      (state) => {
+        if (mine !== request.current) return;
+        setFollowing(true);
+        receive.current(state);
+      },
+      (err) => mine === request.current && setError(readApiError(err, "Couldn't load that run.").message),
     );
-  }, [initialRunId]);
+  }, []);
+
+  useEffect(() => {
+    if (initialRunId) open(initialRunId);
+  }, [initialRunId, open]);
+
+  // Otherwise show the pair's latest run (from here, a bulk run or the
+  // automatic analysis), so its stages and label boxes are right there.
+  const openedLatest = useRef(Boolean(initialRunId));
+  useEffect(() => {
+    if (openedLatest.current || run || !runs.length) return;
+    openedLatest.current = true;
+    open(runs[0].id);
+  }, [runs, run, open]);
 
   // Poll while the run is queued or running.
   useEffect(() => {
@@ -242,8 +261,10 @@ export default function PipelineRunner({
     return () => window.clearTimeout(id);
   }, [run]);
 
-  const usableSources = runs.filter((r) => r.id !== run?.id);
-  const source = sourceRun || usableSources[0]?.id || "";
+  // Any finished run can feed a re-run, including the one on screen.
+  const showing = run && !isActive(run.status) && runs.some((r) => r.id === run.id) ? run.id : "";
+  const usableSources = runs.filter((r) => r.id !== run?.id || showing);
+  const source = sourceRun || showing || usableSources[0]?.id || "";
   const reusesEarlier = (mode === "from" || mode === "step") && stage > 1;
 
   function pick(next: number) {
@@ -252,6 +273,8 @@ export default function PipelineRunner({
   }
 
   async function start() {
+    request.current++;
+    openedLatest.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -357,6 +380,24 @@ export default function PipelineRunner({
         </div>
         {run && (
           <div className="flex flex-wrap items-center gap-2 text-sm">
+            {runs.length > 1 && (
+              <select
+                aria-label="Showing run"
+                value={run.id}
+                disabled={active}
+                onChange={(e) => open(e.target.value)}
+                className="h-8 max-w-[16rem] rounded-lg border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-gray-400"
+              >
+                {!runs.some((r) => r.id === run.id) && <option value={run.id}>This run</option>}
+                {runs.map((r, i) => (
+                  <option key={r.id} value={r.id}>
+                    {i === 0 ? "Latest · " : ""}
+                    {new Date(r.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                    {r.is_test ? " · test" : ""} · {RUN_STATUS_LABEL[r.status]}
+                  </option>
+                ))}
+              </select>
+            )}
             {run.is_test && (
               <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-inset ring-violet-600/20">
                 Test run
