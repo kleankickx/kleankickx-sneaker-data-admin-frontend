@@ -14,6 +14,7 @@ import {
   type SneakersMeta,
 } from "../lib/api";
 import { readApiError } from "../lib/api-errors";
+import { toast } from "../lib/toast";
 import {
   FIELD_LABELS,
   FUNNEL_LABELS,
@@ -589,7 +590,6 @@ export default function PipelineMonitorPage() {
   const [loadedAt, setLoadedAt] = useState<Date | null>(null);
   const [openStep, setOpenStep] = useState<FunnelStep | null>(null);
   const [rerunning, setRerunning] = useState<Set<string>>(new Set());
-  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -631,7 +631,7 @@ export default function PipelineMonitorPage() {
     setRerunning((current) => new Set(current).add(pairId));
     try {
       await rerunAnalysis(pairId);
-      setNotice("Analysis queued.");
+      toast.success("Analysis queued.");
       setTick((n) => n + 1);
     } catch (err) {
       setRerunning((current) => {
@@ -639,7 +639,7 @@ export default function PipelineMonitorPage() {
         next.delete(pairId);
         return next;
       });
-      setNotice(readApiError(err, "Couldn't queue the analysis.").message);
+      toast.error(readApiError(err, "Couldn't queue the analysis.").message);
     }
   }
 
@@ -730,13 +730,6 @@ export default function PipelineMonitorPage() {
         </div>
 
         <BulkRunsCard refresh={tick} />
-
-        {notice && (
-          <p role="status" className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">
-            {notice}
-            <button type="button" onClick={() => setNotice(null)} className="ml-3 underline">Dismiss</button>
-          </p>
-        )}
 
         {error && !data && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-white p-6 text-center">

@@ -11,9 +11,11 @@ import {
   type PermissionArea,
   type Role,
 } from "../lib/access-api";
+import InfoTip from "../components/ui/InfoTip";
 import { useConfirm } from "../components/ui/useConfirm";
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
+import { toast } from "../lib/toast";
 
 type Draft = { name: string; description: string; permissions: Permission[]; require_mfa: boolean };
 
@@ -120,7 +122,7 @@ export default function RolesPage() {
       if (selected === "new") {
         const created = await createRole(draft);
         await reload(created.id);
-        setMessage({ tone: "ok", text: `${created.name} created.` });
+        toast.success(`${created.name} created.`);
       } else if (role) {
         const changes: Partial<Draft> = {};
         if (draft.name !== role.name) changes.name = draft.name;
@@ -130,16 +132,16 @@ export default function RolesPage() {
         const updated = await updateRole(role.id, changes);
         setRole(updated);
         await reload(updated.id);
-        setMessage({
-          tone: "ok",
-          text: changes.permissions && updated.user_count
-            ? `Saved. Its ${updated.user_count} member${updated.user_count === 1 ? " was" : "s were"} signed out so the change applies.`
-            : "Saved.",
-        });
+        toast.success(
+          changes.permissions && updated.user_count
+            ? `Its ${updated.user_count} member${updated.user_count === 1 ? " was" : "s were"} signed out so the change applies.`
+            : `${updated.name} saved.`,
+          { title: changes.permissions && updated.user_count ? `${updated.name} saved` : undefined },
+        );
       }
     } catch (err) {
       const { message, fields } = readApiError(err, "Couldn't save the role.");
-      setMessage({ tone: "error", text: Object.values(fields)[0] || message });
+      toast.error(Object.values(fields)[0] || message, { title: "Couldn't save the role" });
     } finally {
       setBusy(false);
     }
@@ -160,9 +162,9 @@ export default function RolesPage() {
       const list = await listRoles();
       setRoles(list);
       setSelected(list[0]?.id ?? null);
-      setMessage({ tone: "ok", text: "Role deleted." });
+      toast.success("Role deleted.");
     } catch (err) {
-      setMessage({ tone: "error", text: readApiError(err, "Couldn't delete the role.").message });
+      toast.error(readApiError(err, "Couldn't delete the role.").message);
     } finally {
       setBusy(false);
     }
@@ -209,7 +211,10 @@ export default function RolesPage() {
               <span className="min-w-0">
                 <span className="flex items-center gap-2 text-sm font-medium text-gray-900">
                   {r.name}
-                  {r.is_system && <span className="rounded bg-gray-100 px-1.5 text-[10px] font-semibold uppercase text-gray-500">System</span>}
+                  {r.is_system && (
+                    <span title="Built in: it can't be renamed or deleted, but you can change its permissions."
+                      className="rounded bg-gray-100 px-1.5 text-[10px] font-semibold uppercase text-gray-500">System</span>
+                  )}
                 </span>
                 <span className="block text-xs text-gray-500">{r.permissions.length} permissions{r.require_mfa ? " · 2FA required" : ""}</span>
               </span>
@@ -244,7 +249,12 @@ export default function RolesPage() {
                 <input type="checkbox" className="mt-0.5 h-4 w-4 accent-gray-900" checked={draft.require_mfa} disabled={!canEdit}
                   onChange={(e) => setDraft({ ...draft, require_mfa: e.target.checked })} />
                 <span>
-                  <span className="block text-sm font-medium text-gray-900">Require two-factor sign-in</span>
+                  <span className="flex items-center gap-1 text-sm font-medium text-gray-900">
+                    Require two-factor sign-in
+                    <InfoTip label="About requiring two-factor">
+                      Someone with any role that requires it must use it. Existing members are asked to set it up the next time they sign in.
+                    </InfoTip>
+                  </span>
                   <span className="block text-xs text-gray-500">Members set up an authenticator app at their next sign-in and can't turn it off.</span>
                 </span>
               </label>

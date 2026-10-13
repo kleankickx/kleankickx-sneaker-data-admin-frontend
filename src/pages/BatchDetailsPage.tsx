@@ -35,6 +35,7 @@ import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import EditPairModal from "../components/sneakers/EditPairModal";
 import { useAuth } from "../lib/auth-context";
 import { useBulkUpload } from "../lib/bulk-upload-store";
+import { toast } from "../lib/toast";
 
 import type { SneakerPair } from "../lib/types";
 
@@ -199,11 +200,6 @@ function getPaginationItems(
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
 /* -------------------------------------------------------------------------- */
-
-type Toast = {
-  type: "success" | "error";
-  message: string;
-};
 
 type ConfirmAction = "open" | "close" | "delete" | null;
 
@@ -818,7 +814,6 @@ export default function BatchDetailsPage() {
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
   const [confirmError, setConfirmError] = useState("");
-  const [toast, setToast] = useState<Toast | null>(null);
 
   /* Cleanup state */
   const [showCleanup, setShowCleanup] = useState(false);
@@ -905,11 +900,7 @@ export default function BatchDetailsPage() {
     type: "success" | "error",
     message: string,
   ) {
-    setToast({ type, message });
-
-    window.setTimeout(() => {
-      setToast(null);
-    }, 4000);
+    toast[type](message);
   }
 
   /* Load batch details */
@@ -1406,45 +1397,6 @@ export default function BatchDetailsPage() {
   /* Render */
   return (
     <div className="mx-auto max-w-[1600px] space-y-6">
-      {/* Toast */}
-      {toast && (
-        <div className="fixed right-5 top-5 z-50 w-[min(380px,calc(100vw-40px))]">
-          <div
-            className={`flex items-start gap-3 rounded-xl border bg-white p-4 shadow-xl ${
-              toast.type === "success"
-                ? "border-emerald-200"
-                : "border-red-200"
-            }`}
-          >
-            <span
-              className={`material-symbols-outlined ${
-                toast.type === "success"
-                  ? "text-emerald-600"
-                  : "text-red-600"
-              }`}
-            >
-              {toast.type === "success"
-                ? "check_circle"
-                : "error"}
-            </span>
-
-            <p className="flex-1 text-sm font-medium text-gray-800">
-              {toast.message}
-            </p>
-
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="text-gray-400 hover:text-gray-700"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                close
-              </span>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Breadcrumb */}
       <Link
         to="/batches"

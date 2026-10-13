@@ -9,6 +9,8 @@ import {
 import type { Permission } from "../../lib/access-api";
 import { useAuth } from "../../lib/auth-context";
 import UploadPanel from "../bulk/UploadPanel";
+import ActivityWatcher from "../ActivityWatcher";
+import Toaster from "../ui/Toaster";
 
 type NavigationItem = {
   name: string;
@@ -409,6 +411,10 @@ export default function AdminLayout() {
 
       {/* Bulk upload progress; renders nothing while idle. */}
       <UploadPanel />
+
+      {/* Pop-up notifications, and background activity worth one. */}
+      <Toaster />
+      <ActivityWatcher />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 } from "../lib/api";
 import StageTimeline from "../components/pipeline/StageTimeline";
 import { readApiError } from "../lib/api-errors";
+import { toast } from "../lib/toast";
 import { FIELD_LABELS, STAGE_LABELS, duration } from "../lib/monitor";
 
 const STATUS_STYLE: Record<string, { icon: string; text: string; dot: string; label: string }> = {
@@ -157,7 +158,6 @@ export default function PipelineRunPage() {
   const { runId = "" } = useParams<{ runId: string }>();
   const [run, setRun] = useState<PipelineRunDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [queued, setQueued] = useState(false);
 
   useEffect(() => {
@@ -176,10 +176,10 @@ export default function PipelineRunPage() {
     setQueued(true);
     try {
       await rerunAnalysis(run.sneaker_pair);
-      setNotice("Analysis queued.");
+      toast.success("Analysis queued.", { action: { label: "Open pair", to: `/sneakers/${run.sneaker_pair}` } });
     } catch (err) {
       setQueued(false);
-      setNotice(readApiError(err, "Couldn't queue the analysis.").message);
+      toast.error(readApiError(err, "Couldn't queue the analysis.").message);
     }
   }
 
@@ -225,8 +225,6 @@ export default function PipelineRunPage() {
                 </button>
               </div>
             </header>
-
-            {notice && <p role="status" className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">{notice}</p>}
 
             <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
               <h2 className="text-base font-semibold text-gray-900">Steps</h2>

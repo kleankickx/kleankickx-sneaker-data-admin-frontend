@@ -115,7 +115,7 @@ describe("VerificationPanel", () => {
     expect(screen.getByLabelText("Model")).toHaveValue("Air Max 95");
     const model = within(fieldBlock("Model"));
     expect(model.getByText("Air Max 90")).toBeInTheDocument();
-    expect(model.getByText("62%")).toHaveAttribute("title", "Below the review threshold");
+    expect(model.getByText("62%")).toHaveAttribute("title", "AI confidence below 80%: check this one");
     expect(model.getByText("Silhouette on lateral view")).toBeInTheDocument();
 
     // Brand already agrees with the AI.

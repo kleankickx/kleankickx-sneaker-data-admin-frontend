@@ -16,6 +16,9 @@ import {
   type BulkItem,
   type BulkRun,
 } from "../lib/bulk-runs";
+import Toaster from "../components/ui/Toaster";
+import { watchedBulkRuns } from "../lib/activity";
+import { toast } from "../lib/toast";
 import BulkRunPage from "./BulkRunPage";
 
 vi.mock("../lib/bulk-runs", async (importOriginal) => ({
@@ -77,6 +80,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  toast.reset();
+  window.localStorage.clear();
   vi.clearAllMocks();
 });
 
@@ -89,6 +94,7 @@ describe("starting a bulk run", () => {
           <Route path="/batches/b1" element={<BulkRunModal batchId="b1" batchLabel="BATCH-0007" onClose={() => {}} />} />
           <Route path="/pipeline-monitor/bulk/:id" element={<p>Bulk page</p>} />
         </Routes>
+        <Toaster />
       </MemoryRouter>,
     );
 
@@ -107,6 +113,9 @@ describe("starting a bulk run", () => {
       batch: "b1", scope: "all", is_test: true, overrides: { prompt_version: "fdc-v1" },
     }));
     expect(await screen.findByText("Bulk page")).toBeInTheDocument();
+    // You hear about it when it finishes, wherever you are.
+    expect(screen.getByText(/Bulk run started/)).toBeInTheDocument();
+    expect(watchedBulkRuns()).toEqual(["bulk-9"]);
   });
 });
 
@@ -117,6 +126,7 @@ describe("a bulk run", () => {
         <Routes>
           <Route path="/pipeline-monitor/bulk/:bulkId" element={<BulkRunPage />} />
         </Routes>
+        <Toaster />
       </MemoryRouter>,
     );
   }
@@ -166,6 +176,7 @@ describe("a bulk run", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Retry failed (2)" }));
     await waitFor(() => expect(retryBulkRun).toHaveBeenCalledWith("bulk-1", { statuses: ["failed", "needs_attention"] }));
     expect(await screen.findByText("2 pairs queued again.")).toBeInTheDocument();
+    expect(watchedBulkRuns()).toEqual(["bulk-1"]);
 
     fireEvent.click(screen.getByLabelText("Select KKX-PAIR-1"));
     fireEvent.click(screen.getByRole("button", { name: "Run selected again" }));

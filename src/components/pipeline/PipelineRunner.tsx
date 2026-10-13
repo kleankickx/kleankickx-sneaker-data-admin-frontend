@@ -25,6 +25,7 @@ import {
   photoUrls,
 } from "../../lib/pipeline";
 import type { SneakerPair } from "../../lib/types";
+import InfoTip from "../ui/InfoTip";
 import PipelineFlow from "./PipelineFlow";
 import StageInspector from "./StageInspector";
 
@@ -430,6 +431,10 @@ export default function PipelineRunner({
             </span>
             Test run
           </label>
+          <InfoTip label="About test runs" side="bottom">
+            A test run goes through every stage and is kept in the history, but doesn't replace the pair's current
+            result, add it to the review queue or change the catalog. Use it to try another provider, model or prompt.
+          </InfoTip>
 
           <button
             type="button"

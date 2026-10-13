@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import InfoTip from "../components/ui/InfoTip";
 import { getReviewQueue } from "../lib/api";
 import type { SneakersMeta } from "../lib/api";
 import type { ReviewQueueRow } from "../lib/types";
@@ -66,8 +67,12 @@ export default function ReviewQueuePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-gray-900">
           Review queue
+          <InfoTip label="About the review queue" side="bottom">
+            Confidence is how sure the AI is of each value it read, from 0 to 100%. Anything under 80% lands here
+            so a person checks it. A pair leaves the queue once it's verified.
+          </InfoTip>
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Pairs where the AI is unsure of at least one field (below 80%

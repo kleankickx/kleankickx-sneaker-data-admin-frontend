@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { getBatchSummary, type BatchSummary } from "../../lib/api";
+import InfoTip from "../ui/InfoTip";
 
 function tone(images: number, required: number) {
   if (images === required) return { bar: "bg-emerald-500", text: "text-emerald-700" };
@@ -104,7 +105,13 @@ export default function BatchSummaryPanel({
 
       <div className="grid gap-6 px-6 py-5 sm:px-7 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Pairs by images uploaded</h3>
+          <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-400">
+            Pairs by images uploaded
+            <InfoTip label="About image counts" side="bottom">
+              Counts each pair's photos across all its capture sessions. A pair needs all {required} angles to be
+              analysed and verified. Select a row to export just those pairs.
+            </InfoTip>
+          </h3>
           <ul className="mt-3 space-y-1">
             {summary.by_image_count.map((b, i) => {
               const t = tone(b.images, required);
@@ -145,7 +152,12 @@ export default function BatchSummaryPanel({
 
         <div className="space-y-5">
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Pairs missing each angle</h3>
+            <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Pairs missing each angle
+              <InfoTip label="About missing angles" side="bottom">
+                How many pairs have no photo for each angle. A pair missing two angles is counted under both.
+              </InfoTip>
+            </h3>
             {missing.length ? (
               <ul className="mt-3 grid grid-cols-3 gap-2">
                 {summary.missing_by_angle.map((m) => (
