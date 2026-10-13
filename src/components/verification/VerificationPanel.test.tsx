@@ -243,7 +243,25 @@ describe("VerificationPanel", () => {
     expect(screen.getByLabelText("Material 2")).toBeInTheDocument();
     fireEvent.click(button("Remove material 1"));
     expect(screen.queryByLabelText("Material 2")).toBeNull();
-    expect(screen.getByText("Materials are saved when you mark the pair verified.")).toBeInTheDocument();
+  });
+
+  it("saves materials with Save changes, before verifying", async () => {
+    vi.mocked(updateSneaker).mockResolvedValue(pair);
+    renderPanel();
+
+    // Only materials changed: Save changes is still available
+    expect(button("Save changes")).toBeDisabled();
+    fireEvent.click(button("Add material"));
+    fireEvent.change(screen.getByLabelText("Material 1"), { target: { value: "suede" } });
+    fireEvent.change(screen.getByLabelText("Region 1"), { target: { value: "upper" } });
+    expect(button("Save changes")).toBeEnabled();
+    fireEvent.click(button("Save changes"));
+
+    await waitFor(() =>
+      expect(updateSneaker).toHaveBeenCalledWith("pair-uuid", {
+        materials: [{ material_type: "suede", location: "upper" }],
+      }),
+    );
   });
 
   it("applies a candidate match through its handle", () => {

@@ -794,6 +794,10 @@ export interface SneakerPairEdit {
   condition?: string;
 }
 
+/* What PATCH /sneakers/{id}/ accepts: the edits, and optionally the
+   materials, which replace the pair's human-entered ones. */
+export type SneakerPairUpdate = SneakerPairEdit & { materials?: VerifiedMaterial[] };
+
 /* Matches SneakerPairDeletionService.preview in the backend. */
 export interface PairDeletionPreview {
   capture_sessions: number;
@@ -813,7 +817,7 @@ export interface DeletePairResponse {
 
 export async function updateSneaker(
   sneakerId: string,
-  data: SneakerPairEdit,
+  data: SneakerPairUpdate,
 ): Promise<SneakerPair> {
   const response = await api.patch<ApiResponse<SneakerPair>>(
     `/sneakers/${sneakerId}/`,
