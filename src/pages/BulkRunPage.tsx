@@ -317,7 +317,9 @@ export default function BulkRunPage() {
                       </td>
                     )}
                     <td className="px-4 py-3">
-                      <Link to={`/sneakers/${item.sneaker_pair}`} className="font-mono text-xs font-medium text-gray-900 hover:underline">
+                      {/* Opens the pair with this run in its pipeline runner. */}
+                      <Link to={`/sneakers/${item.sneaker_pair}${item.run ? `?runner=${item.run}` : ""}`}
+                        className="font-mono text-xs font-medium text-gray-900 hover:underline">
                         {item.sneaker_pair_id}
                       </Link>
                       {(item.brand || item.model) && <p className="text-xs text-gray-500">{[item.brand, item.model].filter(Boolean).join(" ")}</p>}

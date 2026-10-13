@@ -90,7 +90,10 @@ beforeEach(() => {
     stage_statuses: {},
   }]);
   vi.mocked(startPipelineRun).mockReset();
-  vi.mocked(getPipelineRunState).mockReset();
+  // The pair's latest run opens by itself.
+  vi.mocked(getPipelineRunState).mockReset().mockImplementation(async (id) => runState({
+    id, status: "completed", is_test: false, stages: stages(Array(7).fill("done")),
+  }));
   vi.mocked(nextPipelineStep).mockReset();
   vi.mocked(promotePipelineRun).mockReset();
 });
@@ -105,6 +108,38 @@ async function renderRunner(props: Partial<Parameters<typeof PipelineRunner>[0]>
 }
 
 describe("PipelineRunner", () => {
+  it("opens the pair's latest run, e.g. from a bulk run, and switches to earlier ones", async () => {
+    vi.mocked(listPipelineRuns).mockResolvedValue([
+      { id: "run-9", status: "completed", mode: "all", is_test: false, prompt_version: "fdc-v2", model_name: "vision-1",
+        created_at: "2026-10-12T10:00:00Z", finished_at: "2026-10-12T10:01:00Z", stage_statuses: {} },
+      { id: "run-1", status: "failed", mode: "all", is_test: true, prompt_version: "fdc-v1", model_name: "vision-1",
+        created_at: "2026-10-08T10:00:00Z", finished_at: "2026-10-08T10:01:00Z", stage_statuses: {} },
+    ]);
+    await renderRunner();
+
+    await waitFor(() => expect(getPipelineRunState).toHaveBeenCalledWith("run-9"));
+    expect(await screen.findByRole("button", { name: /^3\. Label reader: Done/ })).toBeInTheDocument();
+    const picker = screen.getByLabelText("Showing run");
+    expect(picker).toHaveValue("run-9");
+
+    fireEvent.change(picker, { target: { value: "run-1" } });
+    await waitFor(() => expect(getPipelineRunState).toHaveBeenLastCalledWith("run-1"));
+  });
+
+  it("doesn't let the latest run replace one you just started", async () => {
+    let finishLoad: (s: PipelineRunState) => void = () => {};
+    vi.mocked(getPipelineRunState).mockImplementation(() => new Promise((resolve) => { finishLoad = resolve; }));
+    vi.mocked(startPipelineRun).mockResolvedValue(runState({ id: "run-new", status: "stopped" }));
+    await renderRunner();
+    await waitFor(() => expect(getPipelineRunState).toHaveBeenCalledWith("run-1"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Run all stages" }));
+    await waitFor(() => expect(startPipelineRun).toHaveBeenCalled());
+    finishLoad(runState({ id: "run-1", status: "completed", stages: stages(Array(7).fill("done")) }));
+
+    expect(await screen.findByRole("button", { name: /^1\. Load photos: Running/ })).toBeInTheDocument();
+  });
+
   it("shows the flow and runs up to the selected stage with overrides", async () => {
     vi.mocked(startPipelineRun).mockResolvedValue(runState({ status: "stopped", mode: "to", to_stage: 3 }));
     await renderRunner();
