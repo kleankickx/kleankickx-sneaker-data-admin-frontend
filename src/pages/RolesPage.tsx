@@ -18,6 +18,38 @@ type Draft = { name: string; description: string; permissions: Permission[]; req
 
 const EMPTY: Draft = { name: "", description: "", permissions: [], require_mfa: false };
 
+/* The editor's shape while a role loads. */
+function RoleSkeleton() {
+  const bar = "animate-pulse rounded bg-gray-100";
+  return (
+    <section aria-busy="true" aria-label="Loading role" className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="space-y-4 border-b border-gray-200 p-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="space-y-2">
+              <div className={`${bar} h-3 w-20`} />
+              <div className={`${bar} h-10 w-full rounded-lg`} />
+            </div>
+          ))}
+        </div>
+        <div className={`${bar} h-4 w-64`} />
+      </div>
+      <div className="space-y-6 p-6">
+        {[4, 2, 3].map((count, area) => (
+          <div key={area} className="space-y-2">
+            <div className={`${bar} h-3 w-32`} />
+            <div className="grid gap-2 sm:grid-cols-2">
+              {Array.from({ length: count }, (_, i) => (
+                <div key={i} className={`${bar} h-16 rounded-lg`} style={{ animationDelay: `${(area * 4 + i) * 60}ms` }} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Settings → Roles (manage_roles): roles and the permissions they grant. */
 export default function RolesPage() {
   const { user, can } = useAuth();
@@ -56,15 +88,21 @@ export default function RolesPage() {
   useEffect(() => {
     if (selected === null || selected === "new") return;
     let live = true;
-    getRole(selected).then((r) => {
-      if (!live) return;
-      setRole(r);
-      setDraft({ name: r.name, description: r.description, permissions: r.permissions, require_mfa: r.require_mfa });
-    });
+    getRole(selected).then(
+      (r) => {
+        if (!live) return;
+        setRole(r);
+        setDraft({ name: r.name, description: r.description, permissions: r.permissions, require_mfa: r.require_mfa });
+      },
+      (err) => live && setMessage({ tone: "error", text: readApiError(err, "Couldn't load the role.").message }),
+    );
     return () => {
       live = false;
     };
   }, [selected]);
+
+  /* The editor still shows another role (or none) while the chosen one loads. */
+  const loadingRole = typeof selected === "number" && role?.id !== selected;
 
   function toggle(codename: Permission) {
     setDraft((d) => ({
@@ -156,7 +194,7 @@ export default function RolesPage() {
         <nav aria-label="Roles" className="space-y-1">
           {roles === null && <div className="h-40 animate-pulse rounded-xl bg-gray-100" />}
           {roles?.map((r) => (
-            <button key={r.id} type="button" onClick={() => setSelected(r.id)} aria-current={selected === r.id}
+            <button key={r.id} type="button" onClick={() => { setMessage(null); setSelected(r.id); }} aria-current={selected === r.id}
               className={`flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition ${
                 selected === r.id ? "border-gray-900 bg-white shadow-sm" : "border-transparent hover:bg-white"
               }`}>
@@ -175,7 +213,9 @@ export default function RolesPage() {
           )}
         </nav>
 
-        {selected !== null && (selected === "new" || role) && (
+        {loadingRole && message?.tone !== "error" && <RoleSkeleton />}
+
+        {selected !== null && !loadingRole && (selected === "new" || role) && (
           <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
             <div className="space-y-4 border-b border-gray-200 p-6">
               <div className="grid gap-4 sm:grid-cols-2">

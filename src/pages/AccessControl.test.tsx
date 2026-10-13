@@ -249,6 +249,26 @@ describe("profile", () => {
   });
 });
 
+describe("roles loading", () => {
+  it("shows a skeleton while the chosen role loads", async () => {
+    signIn(ALL);
+    let finish: (role: Role) => void = () => {};
+    vi.mocked(getRole).mockImplementation(async (id) =>
+      id === 1 ? { ...ROLES[0], members: [] } : new Promise<Role>((resolve) => { finish = resolve; }),
+    );
+    render(<MemoryRouter><RolesPage /></MemoryRouter>);
+    expect(await screen.findByText("The Administrator role always has every permission.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Viewer/ }));
+    expect(screen.getByLabelText("Loading role")).toBeInTheDocument();
+    expect(screen.queryByText("The Administrator role always has every permission.")).not.toBeInTheDocument();
+
+    finish({ ...ROLES[1], members: [] });
+    expect(await screen.findByLabelText("Description")).toHaveValue("Read-only");
+    expect(screen.queryByLabelText("Loading role")).not.toBeInTheDocument();
+  });
+});
+
 describe("roles", () => {
   it("locks the Administrator role and saves a custom role's permissions", async () => {
     signIn(ALL);
