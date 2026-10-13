@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
@@ -7,6 +7,7 @@ import {
   BULK_STATUS,
   ITEM_STATUS,
   cancelBulkRun,
+  deleteBulkRun,
   done,
   getBulkRun,
   resumeBulkRun,
@@ -38,6 +39,7 @@ function retryAt(item: BulkItem) {
 export default function BulkRunPage() {
   const { bulkId = "" } = useParams<{ bulkId: string }>();
   const { can } = useAuth();
+  const navigate = useNavigate();
   const [run, setRun] = useState<BulkRun | null>(null);
   const [items, setItems] = useState<BulkItem[]>([]);
   const [count, setCount] = useState(0);
@@ -106,6 +108,20 @@ export default function BulkRunPage() {
   const allSelected = selectable.length > 0 && selectable.every((i) => selected.has(i.id));
   const nextRetry = items.map(retryAt).filter(Boolean).sort((a, b) => a!.getTime() - b!.getTime())[0];
 
+  async function remove() {
+    if (!run || !window.confirm(
+      "Delete this bulk run? Its list of pairs goes; the pairs keep their runs and results.",
+    )) return;
+    setBusy(true);
+    try {
+      await deleteBulkRun(run.id);
+      navigate("/pipeline-monitor", { replace: true });
+    } catch (err) {
+      setNotice(readApiError(err, "Couldn't delete the bulk run.").message);
+      setBusy(false);
+    }
+  }
+
   function toggle(id: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -167,6 +183,13 @@ export default function BulkRunPage() {
                 }}
                 className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
                 Cancel
+              </button>
+            )}
+            {(run.status === "completed" || run.status === "cancelled") && (
+              <button type="button" disabled={busy} onClick={remove}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete</span>
+                Delete
               </button>
             )}
           </div>

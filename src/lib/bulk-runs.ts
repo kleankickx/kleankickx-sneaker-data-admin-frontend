@@ -106,6 +106,11 @@ export async function cancelBulkRun(id: string): Promise<BulkRun> {
   return response.data.data;
 }
 
+/** Completed or cancelled runs only; the pairs keep their runs and results. */
+export async function deleteBulkRun(id: string): Promise<void> {
+  await api.delete(`/pipeline-bulk-runs/${id}/`);
+}
+
 export async function resumeBulkRun(id: string): Promise<BulkRun> {
   const response = await api.post(`/pipeline-bulk-runs/${id}/resume/`);
   return response.data.data;

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import BulkRunModal from "../components/pipeline/BulkRunModal";
 import { getPipelineOptions } from "../lib/api";
 import {
+  deleteBulkRun,
   getBulkRun,
   previewBulkRun,
   retryBulkRun,
@@ -24,6 +25,7 @@ vi.mock("../lib/bulk-runs", async (importOriginal) => ({
   getBulkRun: vi.fn(),
   retryBulkRun: vi.fn(),
   cancelBulkRun: vi.fn(),
+  deleteBulkRun: vi.fn(),
   resumeBulkRun: vi.fn(),
 }));
 
@@ -132,6 +134,28 @@ describe("a bulk run", () => {
     expect(within(rows[3]).getByText("Rate limited")).toBeInTheDocument();
     expect(within(rows[3]).getByText("4 attempts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+  });
+
+  it("deletes a finished bulk run, not a paused one", async () => {
+    renderPage();
+    await screen.findByText(/Paused: nothing more is being sent/);
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    cleanup();
+
+    vi.mocked(getBulkRun).mockResolvedValue({ run: { ...RUN, status: "completed", pause_reason: "" }, items: ITEMS, count: 4 });
+    vi.mocked(deleteBulkRun).mockResolvedValue();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <MemoryRouter initialEntries={["/pipeline-monitor/bulk/bulk-1"]}>
+        <Routes>
+          <Route path="/pipeline-monitor/bulk/:bulkId" element={<BulkRunPage />} />
+          <Route path="/pipeline-monitor" element={<p>Monitor</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(deleteBulkRun).toHaveBeenCalledWith("bulk-1"));
+    expect(await screen.findByText("Monitor")).toBeInTheDocument();
   });
 
   it("retries failed pairs, re-runs chosen ones and filters by status", async () => {
