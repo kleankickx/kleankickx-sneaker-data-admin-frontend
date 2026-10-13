@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { useConfirm } from "../components/ui/useConfirm";
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -40,6 +41,7 @@ export default function BulkRunPage() {
   const { bulkId = "" } = useParams<{ bulkId: string }>();
   const { can } = useAuth();
   const navigate = useNavigate();
+  const { confirm, dialog } = useConfirm();
   const [run, setRun] = useState<BulkRun | null>(null);
   const [items, setItems] = useState<BulkItem[]>([]);
   const [count, setCount] = useState(0);
@@ -109,9 +111,13 @@ export default function BulkRunPage() {
   const nextRetry = items.map(retryAt).filter(Boolean).sort((a, b) => a!.getTime() - b!.getTime())[0];
 
   async function remove() {
-    if (!run || !window.confirm(
-      "Delete this bulk run? Its list of pairs goes; the pairs keep their runs and results.",
-    )) return;
+    if (!run || !(await confirm({
+      title: "Delete this bulk run?",
+      message: "Its list of pairs is removed. The pairs keep their runs and results.",
+      confirmLabel: "Delete bulk run",
+      tone: "danger",
+      icon: "delete",
+    }))) return;
     setBusy(true);
     try {
       await deleteBulkRun(run.id);
@@ -176,10 +182,16 @@ export default function BulkRunPage() {
             )}
             {(run.status === "running" || run.status === "paused") && (
               <button type="button" disabled={busy}
-                onClick={() => {
-                  if (window.confirm("Cancel the pairs still queued? Pairs already running will finish.")) {
-                    act(async () => { await cancelBulkRun(run.id); return "Cancelled."; });
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Cancel this bulk run?",
+                    message: "Pairs still queued won't run. Pairs already running will finish.",
+                    confirmLabel: "Cancel bulk run",
+                    cancelLabel: "Keep running",
+                    tone: "danger",
+                    icon: "stop_circle",
+                  });
+                  if (ok) act(async () => { await cancelBulkRun(run.id); return "Cancelled."; });
                 }}
                 className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
                 Cancel
@@ -346,6 +358,8 @@ export default function BulkRunPage() {
           </div>
         )}
       </section>
+
+      {dialog}
     </div>
   );
 }

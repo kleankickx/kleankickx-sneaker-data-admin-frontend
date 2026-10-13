@@ -144,7 +144,6 @@ describe("a bulk run", () => {
 
     vi.mocked(getBulkRun).mockResolvedValue({ run: { ...RUN, status: "completed", pause_reason: "" }, items: ITEMS, count: 4 });
     vi.mocked(deleteBulkRun).mockResolvedValue();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(
       <MemoryRouter initialEntries={["/pipeline-monitor/bulk/bulk-1"]}>
         <Routes>
@@ -154,6 +153,10 @@ describe("a bulk run", () => {
       </MemoryRouter>,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Delete this bulk run?" });
+    // The safe choice has focus
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete bulk run" }));
     await waitFor(() => expect(deleteBulkRun).toHaveBeenCalledWith("bulk-1"));
     expect(await screen.findByText("Monitor")).toBeInTheDocument();
   });

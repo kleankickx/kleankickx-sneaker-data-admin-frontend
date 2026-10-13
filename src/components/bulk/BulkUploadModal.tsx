@@ -45,6 +45,7 @@ import {
   markBulkGuideSeen,
 } from "../../lib/bulk-guide";
 import FilePreview from "../FilePreview";
+import { useConfirm } from "../ui/useConfirm";
 import BulkUploadGuide from "./BulkUploadGuide";
 import { acceptFor, contentTypeForName } from "../../lib/image-types";
 
@@ -528,6 +529,7 @@ function UnassignedRow({
 
 function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
   const phase = useBulkUpload((s) => s.phase);
+  const { confirm, dialog } = useConfirm();
 
   const [step, setStep] = useState<Step>("intake");
   /* Open guide step, or null. Shown automatically the first time. */
@@ -574,7 +576,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
 
   /* ---------------- intake ---------------- */
 
-  function handleInputs(inputs: DroppedInput[]) {
+  async function handleInputs(inputs: DroppedInput[]) {
     const usable = inputs.filter((i) => !isIgnoredFile(i.relativePath));
     const supported = usable.filter(
       (i) => contentTypeForName(i.file.name, rules.contentTypes) !== null,
@@ -582,7 +584,13 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
 
     if (
       review.pairs.length > 0 &&
-      !window.confirm("Replace the pairs you are reviewing with these files?")
+      !(await confirm({
+        title: "Replace the pairs you're reviewing?",
+        message: "The pairs and photos below are replaced with the files you just added.",
+        confirmLabel: "Replace",
+        tone: "danger",
+        icon: "swap_horiz",
+      }))
     ) {
       return;
     }
@@ -639,11 +647,18 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
     setGuideStep(null);
   }
 
-  function handleCancel() {
+  async function handleCancel() {
     if (
       step === "review" &&
       review.pairs.length > 0 &&
-      !window.confirm("Discard these pairs and close?")
+      !(await confirm({
+        title: "Discard these pairs?",
+        message: "The pairs you set up here aren't uploaded and are lost when you close.",
+        confirmLabel: "Discard and close",
+        cancelLabel: "Keep reviewing",
+        tone: "danger",
+        icon: "delete_sweep",
+      }))
     ) {
       return;
     }
@@ -879,6 +894,7 @@ function BulkUploadModalInner({ batchId, onClose }: BulkUploadModalProps) {
           </>
         )}
       </div>
+      {dialog}
     </div>
   );
 }

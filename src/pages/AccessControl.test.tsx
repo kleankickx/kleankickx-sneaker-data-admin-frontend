@@ -236,13 +236,17 @@ describe("profile", () => {
   it("lets an administrator rename someone else", async () => {
     signIn(["manage_users", "view_batches", "view_pipeline"]);
     vi.mocked(updateUser).mockResolvedValue({ ...USER, username: "kojo.mensah" });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<MemoryRouter><UsersPage /></MemoryRouter>);
 
     fireEvent.click(await screen.findByText("Kojo"));
     const panel = screen.getByRole("dialog", { name: "User kojo" });
     fireEvent.change(within(panel).getByLabelText("Username"), { target: { value: "kojo.mensah" } });
     fireEvent.click(within(panel).getByRole("button", { name: "Save details" }));
+
+    const ask = await screen.findByRole("alertdialog", { name: "Rename kojo?" });
+    expect(ask).toHaveTextContent("kojo.mensah");
+    expect(updateUser).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole("button", { name: "Rename" }));
 
     await waitFor(() => expect(updateUser).toHaveBeenCalledWith("u2", { username: "kojo.mensah" }));
     expect(await within(panel).findByText(/signed out and use the new username/)).toBeInTheDocument();

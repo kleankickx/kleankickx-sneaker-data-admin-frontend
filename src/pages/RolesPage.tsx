@@ -11,6 +11,7 @@ import {
   type PermissionArea,
   type Role,
 } from "../lib/access-api";
+import { useConfirm } from "../components/ui/useConfirm";
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
 
@@ -61,6 +62,7 @@ export default function RolesPage() {
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const canEdit = can("manage_roles");
+  const { confirm, dialog } = useConfirm();
 
   const held = useMemo(() => new Set(user?.is_superuser ? catalog.flatMap((a) => a.permissions.map((p) => p.codename)) : user?.permissions ?? []), [user, catalog]);
 
@@ -144,7 +146,13 @@ export default function RolesPage() {
   }
 
   async function remove() {
-    if (!role || !window.confirm(`Delete the ${role.name} role?`)) return;
+    if (!role || !(await confirm({
+      title: `Delete the ${role.name} role?`,
+      message: "This can't be undone. Nobody has this role, so no one loses access.",
+      confirmLabel: "Delete role",
+      tone: "danger",
+      icon: "delete",
+    }))) return;
     setBusy(true);
     try {
       await deleteRole(role.id);
@@ -316,6 +324,8 @@ export default function RolesPage() {
           </section>
         )}
       </div>
+
+      {dialog}
     </div>
   );
 }
