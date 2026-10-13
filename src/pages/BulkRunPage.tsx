@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import InfoTip from "../components/ui/InfoTip";
 import { useConfirm } from "../components/ui/useConfirm";
+import { watchBulkRun } from "../lib/activity";
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
 import {
@@ -18,6 +20,7 @@ import {
   type BulkRun,
 } from "../lib/bulk-runs";
 import { duration } from "../lib/monitor";
+import { toast } from "../lib/toast";
 
 const POLL_MS = 3000;
 const ORDER: BulkItemStatus[] = ["succeeded", "needs_attention", "failed", "running", "queued", "skipped", "cancelled"];
@@ -49,7 +52,6 @@ export default function BulkRunPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
   const canRun = can("run_pipeline");
@@ -81,19 +83,20 @@ export default function BulkRunPage() {
     return () => window.clearInterval(id);
   }, [active]);
 
-  const act = useCallback(async (work: () => Promise<string>) => {
+  const act = useCallback(async (work: () => Promise<string>, { watch = false } = {}) => {
     setBusy(true);
-    setNotice("");
     try {
-      setNotice(await work());
+      toast.success(await work());
+      // Running again: let me know when it's done, even from another page.
+      if (watch) watchBulkRun(bulkId);
       setSelected(new Set());
       setTick((n) => n + 1);
     } catch (err) {
-      setNotice(readApiError(err, "That didn't work.").message);
+      toast.error(readApiError(err, "That didn't work.").message);
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [bulkId]);
 
   if (error && !run) {
     return <p role="alert" className="mx-auto mt-10 max-w-3xl rounded-xl border border-red-200 bg-white p-6 text-sm text-red-700">{error}</p>;
@@ -121,9 +124,10 @@ export default function BulkRunPage() {
     setBusy(true);
     try {
       await deleteBulkRun(run.id);
+      toast.success("Bulk run deleted.");
       navigate("/pipeline-monitor", { replace: true });
     } catch (err) {
-      setNotice(readApiError(err, "Couldn't delete the bulk run.").message);
+      toast.error(readApiError(err, "Couldn't delete the bulk run.").message);
       setBusy(false);
     }
   }
@@ -165,7 +169,7 @@ export default function BulkRunPage() {
         {canRun && (
           <div className="flex flex-wrap gap-2">
             {run.status === "paused" && (
-              <button type="button" disabled={busy} onClick={() => act(async () => { await resumeBulkRun(run.id); return "Resumed."; })}
+              <button type="button" disabled={busy} onClick={() => act(async () => { await resumeBulkRun(run.id); return "Resumed."; }, { watch: true })}
                 className="rounded-lg bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
                 Resume
               </button>
@@ -175,10 +179,15 @@ export default function BulkRunPage() {
                 onClick={() => act(async () => {
                   const r = await retryBulkRun(run.id, { statuses: ["failed", "needs_attention"] });
                   return `${r.queued} pair${r.queued === 1 ? "" : "s"} queued again.`;
-                })}
+                }, { watch: true })}
                 className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                 Retry failed ({retryable})
               </button>
+            )}
+            {retryable > 0 && (
+              <InfoTip label="About retrying" side="bottom" className="self-center">
+                Runs the failed and needs-attention pairs again in this bulk run. Their previous runs stay in the history.
+              </InfoTip>
             )}
             {(run.status === "running" || run.status === "paused") && (
               <button type="button" disabled={busy}
@@ -223,11 +232,17 @@ export default function BulkRunPage() {
           Waiting out the provider's rate limit. {c.waiting_retry} pair{c.waiting_retry === 1 ? "" : "s"} try again from {nextRetry.toLocaleTimeString()}.
         </div>
       )}
-      {notice && <p role="status" className="rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">{notice}</p>}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex items-baseline justify-between">
-          <p className="text-sm font-medium text-gray-900">{finished} of {c.total} pairs done</p>
+          <p className="flex items-center gap-1 text-sm font-medium text-gray-900">
+            {finished} of {c.total} pairs done
+            <InfoTip label="About the statuses" side="bottom">
+              <b>Succeeded</b>: the vision model read the pair and every field is 80% or more.{" "}
+              <b>Needs attention</b>: it ran, but missed the vision model or a field is under 80%.{" "}
+              <b>Failed</b>: no result. Rate-limited pairs wait and retry on their own before they count as failed.
+            </InfoTip>
+          </p>
           <p className="text-sm tabular-nums text-gray-500">{pct}%</p>
         </div>
         <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-gray-100" role="img"
@@ -262,7 +277,7 @@ export default function BulkRunPage() {
               onClick={() => act(async () => {
                 const r = await retryBulkRun(run.id, { items: [...selected] });
                 return `${r.queued} pair${r.queued === 1 ? "" : "s"} queued to run again.`;
-              })}
+              }, { watch: true })}
               className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
               Run selected again
             </button>

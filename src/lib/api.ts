@@ -1,4 +1,6 @@
 import axios from "axios";
+
+import { toast } from "./toast";
 import type {
   AIIdentificationJob,
   AnalysisRun,
@@ -135,6 +137,15 @@ api.interceptors.response.use(
     /* On a temporary password: send the user to change it. */
     if (status === 403 && code === "password_change_required" && typeof window !== "undefined") {
       window.dispatchEvent(new Event("kkx:password-change-required"));
+    }
+
+    /* Problems no page can fix: say so once, wherever it happened. */
+    if (!error.response && error.code !== "ERR_CANCELED") {
+      toast.error("Check your connection and try again.", { title: "Can't reach the server" });
+    } else if (status && status >= 500) {
+      toast.error("Something went wrong on the server. Try again in a moment.", { title: "Server error" });
+    } else if (status === 429 && code !== "account_locked") {
+      toast.warning("You're going a bit fast. Wait a moment and try again.", { title: "Too many requests" });
     }
 
     const isAuthEndpoint =

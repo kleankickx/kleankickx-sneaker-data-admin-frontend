@@ -36,11 +36,7 @@ import {
   angleSlots,
   verificationBlockers,
 } from "../lib/verification";
-
-interface Toast {
-  type: "success" | "error";
-  message: string;
-}
+import { toast } from "../lib/toast";
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
@@ -164,55 +160,6 @@ function WorkspaceSkeleton() {
   );
 }
 
-function ToastMessage({
-  toast,
-  onDismiss,
-}: {
-  toast: Toast;
-  onDismiss: () => void;
-}) {
-  const success = toast.type === "success";
-
-  return (
-    <div className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-sm">
-      <div
-        role="status"
-        className={`flex items-start gap-3 rounded-xl border bg-white p-4 shadow-lg ${
-          success ? "border-emerald-200" : "border-red-200"
-        }`}
-      >
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            success ? "bg-emerald-50" : "bg-red-50"
-          }`}
-        >
-          <span
-            aria-hidden="true"
-            className={`material-symbols-outlined text-[18px] ${
-              success ? "text-emerald-600" : "text-red-600"
-            }`}
-          >
-            {success ? "check" : "error"}
-          </span>
-        </div>
-
-        <p className="min-w-0 flex-1 text-sm font-medium text-gray-900">
-          {toast.message}
-        </p>
-
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="text-gray-400 transition hover:text-gray-600"
-          aria-label="Dismiss notification"
-        >
-          <span aria-hidden="true" className="material-symbols-outlined text-[18px]">close</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 py-2.5">
@@ -237,7 +184,6 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<Toast | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [replacingImages, setReplacingImages] = useState(false);
 
@@ -285,12 +231,12 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
             setSneaker(pair);
             setError(null);
             if (isRefresh) {
-              setToast({ type: "success", message: "Pair refreshed." });
+              toast.success("Pair refreshed.");
             }
           },
           (err) => {
             if (isRefresh) {
-              setToast({ type: "error", message: loadErrorMessage(err) });
+              toast.error(loadErrorMessage(err));
             } else {
               setError(loadErrorMessage(err));
             }
@@ -354,14 +300,6 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
     reloadAiJob();
     reloadEligibility();
   }
-
-  useEffect(() => {
-    if (!toast) return;
-
-    const timeout = window.setTimeout(() => setToast(null), 3500);
-
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
 
   const slots = useMemo(
     () => (sneaker ? angleSlots(sneaker) : []),
@@ -445,10 +383,6 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {toast && (
-        <ToastMessage toast={toast} onDismiss={() => setToast(null)} />
-      )}
-
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* Header */}
         <button
@@ -589,10 +523,7 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
             getSneaker(sneaker.id).then(setSneaker, () => {});
             reloadEligibility();
             if (finished) setReplacingImages(false);
-            setToast({
-              type: "success",
-              message: `${count} ${count === 1 ? "photo" : "photos"} replaced.`,
-            });
+            toast.success(`${count} ${count === 1 ? "photo" : "photos"} replaced.`);
           }}
         />
 
@@ -645,16 +576,16 @@ function Workspace({ sneakerId }: { sneakerId: string }) {
               checkingEligibility={eligibilityLoading}
               onSaved={(updated) => {
                 setSneaker(updated);
-                setToast({ type: "success", message: "Changes saved." });
+                toast.success("Changes saved.");
               }}
               onAdvanced={(updated, message) => {
                 setSneaker(updated);
                 reloadEligibility();
-                setToast({ type: "success", message });
+                toast.success(message);
               }}
               onVerified={(updated) => {
                 setSneaker(updated);
-                setToast({ type: "success", message: "Pair verified." });
+                toast.success("Pair verified.");
               }}
             />
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AddUserModal, StatusBadges, UserPanel } from "../components/access/UserPanels";
 import { listRoles, listUsers, type ManagedUser, type Role, type UserFilters } from "../lib/access-api";
+import InfoTip from "../components/ui/InfoTip";
 import { readApiError } from "../lib/api-errors";
 import { formatWhen } from "../lib/permissions";
 
@@ -102,8 +103,25 @@ export default function UsersPage() {
               <tr className="border-b border-gray-200 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                 <th className="px-5 py-3">User</th>
                 <th className="px-5 py-3">Roles</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Two-factor</th>
+                <th className="px-5 py-3">
+                  <span className="inline-flex items-center gap-1">
+                    Status
+                    <InfoTip label="About user status" side="bottom">
+                      <b>Temporary password</b>: they must choose their own at next sign-in.{" "}
+                      <b>Locked</b>: too many wrong passwords; it unlocks by itself or an admin can unlock it.{" "}
+                      <b>Deactivated</b>: can't sign in, but their history is kept.
+                    </InfoTip>
+                  </span>
+                </th>
+                <th className="px-5 py-3">
+                  <span className="inline-flex items-center gap-1">
+                    Two-factor
+                    <InfoTip label="About two-factor" side="bottom">
+                      Whether they sign in with a code from an authenticator app as well as their password. A role can require it;
+                      anyone without it set up is asked to at their next sign-in.
+                    </InfoTip>
+                  </span>
+                </th>
                 <th className="px-5 py-3">Last sign-in</th>
               </tr>
             </thead>

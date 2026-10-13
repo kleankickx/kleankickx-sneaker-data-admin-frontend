@@ -10,6 +10,7 @@ import {
 import type { Batch } from "../lib/types";
 import BatchFormModal from "../components/batches/BatchFormModal";
 import { Link } from "react-router-dom";
+import { toast } from "../lib/toast";
 
 type SortField =
   | "batch_id"
@@ -22,13 +23,6 @@ type SortField =
 type SortDirection = "asc" | "desc";
 
 type ActionType = "open" | "close" | "delete";
-
-type ToastType = "success" | "error";
-
-type Toast = {
-  type: ToastType;
-  message: string;
-};
 
 const PAGE_SIZE = 10;
 
@@ -71,10 +65,6 @@ export default function BatchesPage() {
   const actionMenuRef =
     useRef<HTMLDivElement | null>(null);
 
-  // Toast
-  const [toast, setToast] =
-    useState<Toast | null>(null);
-
   useEffect(() => {
     loadBatches();
   }, []);
@@ -108,23 +98,6 @@ export default function BatchesPage() {
     };
   }, []);
 
-  /**
-   * Automatically dismiss toast after 4 seconds.
-   */
-  useEffect(() => {
-    if (!toast) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setToast(null);
-    }, 4000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [toast]);
-
   async function loadBatches() {
     try {
       setLoading(true);
@@ -151,13 +124,10 @@ export default function BatchesPage() {
   }
 
   function showToast(
-    type: ToastType,
+    type: "success" | "error",
     message: string,
   ) {
-    setToast({
-      type,
-      message,
-    });
+    toast[type](message);
   }
 
   const statuses = useMemo(() => {
@@ -556,12 +526,6 @@ export default function BatchesPage() {
 
   return (
     <div className="min-h-full bg-gray-50">
-      {/* Toast notification */}
-      <ToastNotification
-        toast={toast}
-        onClose={() => setToast(null)}
-      />
-
       <div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
         {/* Page header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1061,91 +1025,6 @@ export default function BatchesPage() {
               }
             />
           )}
-      </div>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Toast                                                                      */
-/* -------------------------------------------------------------------------- */
-
-type ToastNotificationProps = {
-  toast: Toast | null;
-  onClose: () => void;
-};
-
-function ToastNotification({
-  toast,
-  onClose,
-}: ToastNotificationProps) {
-  if (!toast) {
-    return null;
-  }
-
-  const isSuccess =
-    toast.type === "success";
-
-  return (
-    <div
-      className="fixed right-5 top-5 z-[100] w-[360px] max-w-[calc(100vw-2rem)]"
-      role="alert"
-    >
-      <div
-        className={`flex items-start gap-3 rounded-xl border bg-white px-4 py-3.5 shadow-lg ${
-          isSuccess
-            ? "border-green-200"
-            : "border-red-200"
-        }`}
-      >
-        <div
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            isSuccess
-              ? "bg-green-50"
-              : "bg-red-50"
-          }`}
-        >
-          <span
-            className={`material-symbols-outlined text-[19px] ${
-              isSuccess
-                ? "text-green-600"
-                : "text-red-600"
-            }`}
-          >
-            {isSuccess
-              ? "check_circle"
-              : "error"}
-          </span>
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p
-            className={`text-sm font-semibold ${
-              isSuccess
-                ? "text-green-800"
-                : "text-red-800"
-            }`}
-          >
-            {isSuccess
-              ? "Success"
-              : "Action failed"}
-          </p>
-
-          <p className="mt-0.5 text-xs leading-5 text-gray-600">
-            {toast.message}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
-          aria-label="Close notification"
-        >
-          <span className="material-symbols-outlined text-[18px]">
-            close
-          </span>
-        </button>
       </div>
     </div>
   );

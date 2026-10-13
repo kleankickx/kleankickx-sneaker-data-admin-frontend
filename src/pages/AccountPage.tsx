@@ -6,6 +6,7 @@ import MfaEnrollment from "../components/access/MfaEnrollment";
 import PasswordForm from "../components/access/PasswordForm";
 import ProfileForm from "../components/access/ProfileForm";
 import { RecoveryCodes } from "../components/access/SecretReveal";
+import InfoTip from "../components/ui/InfoTip";
 import { useConfirm } from "../components/ui/useConfirm";
 import {
   disableMfa,
@@ -16,6 +17,7 @@ import {
 import { readApiError } from "../lib/api-errors";
 import { useAuth } from "../lib/auth-context";
 import { PERMISSION_LABELS } from "../lib/permissions";
+import { toast } from "../lib/toast";
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
@@ -33,7 +35,6 @@ function Section({ title, description, children }: { title: string; description:
 export default function AccountPage() {
   const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
-  const [notice, setNotice] = useState("");
   const [mode, setMode] = useState<"idle" | "enrol" | "disable" | "codes">("idle");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
@@ -59,7 +60,7 @@ export default function AccountPage() {
     try {
       setUser(await disableMfa(password, code));
       reset();
-      setNotice("Two-factor is off.");
+      toast.success("Two-factor is off.");
     } catch (err) {
       setError(readApiError(err, "Couldn't turn two-factor off.").message);
     } finally {
@@ -74,6 +75,7 @@ export default function AccountPage() {
     try {
       setNewCodes(await regenerateRecoveryCodes(code));
       reset();
+      toast.success("Save them somewhere safe. Your old codes no longer work.", { title: "New recovery codes made" });
     } catch (err) {
       setError(readApiError(err, "Couldn't make new codes.").message);
     } finally {
@@ -100,10 +102,6 @@ export default function AccountPage() {
     <div className="mx-auto max-w-5xl">
       <h1 className="text-2xl font-semibold tracking-tight text-gray-900">Account &amp; security</h1>
       <p className="mt-1 text-sm text-gray-500">Your details, password and sign-in protection.</p>
-
-      {notice && (
-        <p role="status" className="mt-6 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">{notice}</p>
-      )}
 
       <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
         <Section title="Profile" description="Your name and email. An administrator changes your username and roles.">
@@ -132,7 +130,7 @@ export default function AccountPage() {
         </Section>
 
         <Section title="Password" description="Changing it signs you out on your other devices.">
-          <PasswordForm onChanged={(u) => { setUser(u); setNotice("Password changed."); }} />
+          <PasswordForm onChanged={(u) => { setUser(u); toast.success("Password changed."); }} />
         </Section>
 
         <Section
@@ -147,6 +145,10 @@ export default function AccountPage() {
               {user.mfa_enabled ? "On" : "Off"}
             </span>
             {user.mfa_required && <span className="text-xs text-gray-500">Required by your role</span>}
+            <InfoTip label="About two-factor and recovery codes" side="bottom">
+              Use any authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…).
+              Lost your phone? Each recovery code signs you in once instead of an app code, so keep them somewhere safe.
+            </InfoTip>
           </div>
 
           {newCodes && <div className="mt-4"><RecoveryCodes codes={newCodes} /></div>}
@@ -159,7 +161,7 @@ export default function AccountPage() {
           )}
           {!user.mfa_enabled && mode === "enrol" && (
             <div className="mt-4">
-              <MfaEnrollment onCancel={reset} onDone={(u) => { setUser(u); reset(); setNotice("Two-factor is on."); }} />
+              <MfaEnrollment onCancel={reset} onDone={(u) => { setUser(u); reset(); toast.success("Two-factor is on."); }} />
             </div>
           )}
 

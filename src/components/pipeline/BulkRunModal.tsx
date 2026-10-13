@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { watchBulkRun } from "../../lib/activity";
 import { getPipelineOptions, type PipelineOptions } from "../../lib/api";
+import { toast } from "../../lib/toast";
 import { readApiError } from "../../lib/api-errors";
 import { previewBulkRun, startBulkRun, type BulkPreview, type BulkScope } from "../../lib/bulk-runs";
 
@@ -61,6 +63,9 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
         Object.entries({ provider, model: model.trim(), prompt_version: prompt }).filter(([, v]) => v),
       );
       const bulk = await startBulkRun({ batch: batchId, scope, is_test: isTest, overrides });
+      // You'll get a notification when it finishes, wherever you are.
+      watchBulkRun(bulk.id);
+      toast.success("We'll let you know when it finishes.", { title: `Bulk run started: ${bulk.label}` });
       navigate(`/pipeline-monitor/bulk/${bulk.id}`);
     } catch (err) {
       setError(readApiError(err, "Couldn't start the bulk run.").message);

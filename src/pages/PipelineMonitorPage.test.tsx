@@ -16,6 +16,8 @@ import {
 import { age, duration, lastNDays, pct } from "../lib/monitor";
 import PipelineMonitorPage from "./PipelineMonitorPage";
 import PipelineRunPage from "./PipelineRunPage";
+import Toaster from "../components/ui/Toaster";
+import { toast } from "../lib/toast";
 
 vi.mock("../lib/api", () => ({
   getPipelineOverview: vi.fn(),
@@ -92,6 +94,7 @@ function renderPage() {
   render(
     <MemoryRouter>
       <PipelineMonitorPage />
+      <Toaster />
     </MemoryRouter>,
   );
 }
@@ -105,6 +108,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  toast.reset();
   vi.useRealTimers();
 });
 

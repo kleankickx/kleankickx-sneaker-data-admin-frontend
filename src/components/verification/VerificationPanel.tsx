@@ -158,7 +158,11 @@ function AiValue({
           className={`shrink-0 rounded px-1 font-medium ${
             low ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-gray-600"
           }`}
-          title={low ? "Below the review threshold" : undefined}
+          title={
+            low
+              ? "AI confidence below 80%: check this one"
+              : "How sure the AI is of this value"
+          }
         >
           {percent(field.confidence)}
         </span>
