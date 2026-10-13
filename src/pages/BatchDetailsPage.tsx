@@ -29,6 +29,7 @@ import { conditionLabel } from "../lib/conditions";
 
 import AddPairModal from "../components/AddPairModal";
 import BatchSummaryPanel from "../components/batches/BatchSummaryPanel";
+import BulkRunModal from "../components/pipeline/BulkRunModal";
 import BulkUploadModal from "../components/bulk/BulkUploadModal";
 import DeletePairDialog from "../components/sneakers/DeletePairDialog";
 import EditPairModal from "../components/sneakers/EditPairModal";
@@ -800,6 +801,7 @@ export default function BatchDetailsPage() {
   /* Summary + export */
   const [summaryVersion, setSummaryVersion] = useState(0);
   const [showExport, setShowExport] = useState(false);
+  const [showBulkRun, setShowBulkRun] = useState(false);
   const [exporting, setExporting] = useState<BatchExportFile | null>(null);
   const pairsRef = useRef<HTMLElement>(null);
 
@@ -1787,6 +1789,20 @@ export default function BatchDetailsPage() {
                 </button>
               )}
 
+              {/* Run the pipeline over many pairs */}
+              {can("run_pipeline") && (
+                <button
+                  type="button"
+                  onClick={() => setShowBulkRun(true)}
+                  className="inline-flex h-9 items-center gap-2 self-start rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 lg:self-auto"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    model_training
+                  </span>
+                  Run pipeline
+                </button>
+              )}
+
               {/* Export, with the list's filters */}
               <div
                 className={`relative self-start lg:self-auto ${can("export_batches") ? "" : "hidden"}`}
@@ -2495,6 +2511,14 @@ export default function BatchDetailsPage() {
         batchId={batchId!}
         onClose={() => setShowBulkUpload(false)}
       />
+
+      {showBulkRun && batchId && (
+        <BulkRunModal
+          batchId={batchId}
+          batchLabel={batchLabel}
+          onClose={() => setShowBulkRun(false)}
+        />
+      )}
 
       {/* Add pair modal */}
       <AddPairModal
