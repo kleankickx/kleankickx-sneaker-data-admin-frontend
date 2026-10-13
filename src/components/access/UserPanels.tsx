@@ -14,6 +14,8 @@ import {
 import { readApiError } from "../../lib/api-errors";
 import { useAuth } from "../../lib/auth-context";
 import { formatWhen } from "../../lib/permissions";
+import type { ConfirmOptions } from "../ui/ConfirmDialog";
+import { useConfirm } from "../ui/useConfirm";
 import { OneTimeSecret } from "./SecretReveal";
 
 const field =
@@ -204,11 +206,34 @@ export function AddUserModal({ roles, onClose, onCreated }: {
 /* One user                                                            */
 /* ------------------------------------------------------------------ */
 
-const ACTION_CONFIRM: Partial<Record<UserAction | "reset-password", string>> = {
-  deactivate: "Deactivate this user? They're signed out at once and can't sign in until reactivated.",
-  "revoke-sessions": "Sign this user out on every device?",
-  "reset-mfa": "Reset their two-factor? They'll set it up again (if their role requires it) at next sign-in.",
-  "reset-password": "Reset their password? They're signed out and get a new temporary password.",
+const ACTION_CONFIRM: Partial<Record<UserAction | "reset-password", ConfirmOptions>> = {
+  deactivate: {
+    title: "Deactivate this user?",
+    message: "They're signed out at once and can't sign in until reactivated. Their history stays.",
+    confirmLabel: "Deactivate",
+    tone: "danger",
+    icon: "person_off",
+  },
+  "revoke-sessions": {
+    title: "Sign this user out everywhere?",
+    message: "Every device they're signed in on is signed out. They can sign in again.",
+    confirmLabel: "Sign out everywhere",
+    icon: "logout",
+  },
+  "reset-mfa": {
+    title: "Reset their two-factor?",
+    message: "Their authenticator and recovery codes stop working. If their role requires two-factor, they set it up again at next sign-in.",
+    confirmLabel: "Reset two-factor",
+    tone: "danger",
+    icon: "phonelink_erase",
+  },
+  "reset-password": {
+    title: "Reset their password?",
+    message: "They're signed out and get a new temporary password, which you'll see once.",
+    confirmLabel: "Reset password",
+    tone: "danger",
+    icon: "key",
+  },
 };
 
 export function UserPanel({ user: initial, roles, onClose, onChanged }: {
@@ -230,6 +255,7 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
   const [tempPassword, setTempPassword] = useState("");
   const [busy, setBusy] = useState("");
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
+  const { confirm, dialog } = useConfirm();
   const isMe = String(me?.id) === user.id;
   const locked = user.is_superuser && !me?.is_superuser;
 
@@ -268,24 +294,28 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
     }
   }
 
-  const saveDetails = () => {
+  const saveDetails = async () => {
     // Only what changed, so an untouched email or username is never re-checked.
     const changes = Object.fromEntries(
       (Object.keys(details) as (keyof typeof details)[])
         .filter((key) => details[key].trim() !== user[key])
         .map((key) => [key, details[key].trim()]),
     );
-    if (changes.username && !window.confirm(
-      `Rename ${user.username} to ${changes.username}? They'll be signed out and sign in with the new username.`,
-    )) return;
+    if (changes.username && !(await confirm({
+      title: `Rename ${user.username}?`,
+      message: <>Their new username is <strong className="font-mono">{changes.username}</strong>. They're signed out and sign in with the new one.</>,
+      confirmLabel: "Rename",
+      icon: "badge",
+    }))) return;
     run("details", async () =>
       done(await updateUser(user.id, changes), changes.username ? "Saved. They've been signed out and use the new username from now on." : "Details saved."),
     );
   };
   const saveRoles = () => run("roles", async () => done(await updateUser(user.id, { role_ids: roleIds }), "Roles saved. They've been signed out so the change applies."));
 
-  function action(name: UserAction | "reset-password", text: string) {
-    if (ACTION_CONFIRM[name] && !window.confirm(ACTION_CONFIRM[name])) return;
+  async function action(name: UserAction | "reset-password", text: string) {
+    const ask = ACTION_CONFIRM[name];
+    if (ask && !(await confirm(ask))) return;
     run(name, async () => {
       if (name === "reset-password") {
         const result = await resetUserPassword(user.id);
@@ -406,6 +436,7 @@ export function UserPanel({ user: initial, roles, onClose, onChanged }: {
           )}
         </div>
       </div>
+      {dialog}
     </div>
   );
 }

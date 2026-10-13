@@ -6,6 +6,7 @@ import MfaEnrollment from "../components/access/MfaEnrollment";
 import PasswordForm from "../components/access/PasswordForm";
 import ProfileForm from "../components/access/ProfileForm";
 import { RecoveryCodes } from "../components/access/SecretReveal";
+import { useConfirm } from "../components/ui/useConfirm";
 import {
   disableMfa,
   regenerateRecoveryCodes,
@@ -39,6 +40,7 @@ export default function AccountPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [newCodes, setNewCodes] = useState<string[] | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   if (!user) return null;
   const permissions = (user.is_superuser ? Object.keys(PERMISSION_LABELS) : user.permissions ?? []) as Permission[];
@@ -80,7 +82,12 @@ export default function AccountPage() {
   }
 
   async function everywhere() {
-    if (!window.confirm("Sign out on every device, including this one?")) return;
+    if (!(await confirm({
+      title: "Sign out everywhere?",
+      message: "Every device you're signed in on is signed out, including this one.",
+      confirmLabel: "Sign out everywhere",
+      icon: "logout",
+    }))) return;
     try {
       await signOutEverywhere();
     } finally {
@@ -211,6 +218,8 @@ export default function AccountPage() {
           </button>
         </Section>
       </div>
+
+      {dialog}
     </div>
   );
 }

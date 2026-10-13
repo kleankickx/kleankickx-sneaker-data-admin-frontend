@@ -76,7 +76,6 @@ beforeEach(() => {
       revokeObjectURL: vi.fn(),
     }),
   );
-  vi.spyOn(window, "confirm").mockReturnValue(true);
   // Most tests are about the upload flow, not the first-visit guide.
   window.localStorage.setItem(GUIDE_SEEN_KEY, "1");
 });
@@ -351,15 +350,20 @@ describe("BulkUploadModal", () => {
     expect(startButton()).toBeEnabled();
   });
 
-  it("asks before discarding reviewed pairs on cancel", () => {
-    vi.mocked(window.confirm).mockReturnValue(false);
+  it("asks in a modal before discarding reviewed pairs on cancel", async () => {
     renderModal();
     chooseFiles(pairFiles("pair-1"));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(window.confirm).toHaveBeenCalled();
+    const dialog = await screen.findByRole("alertdialog", { name: "Discard these pairs?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep reviewing" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Discard and close" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
   it("keeps review state when going back to intake", () => {
