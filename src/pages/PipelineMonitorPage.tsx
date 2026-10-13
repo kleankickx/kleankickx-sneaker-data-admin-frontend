@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import BarChart from "../components/monitor/BarChart";
+import BulkRunsCard from "../components/pipeline/BulkRunsCard";
 import {
   getFunnelPairs,
   getPipelineOverview,
@@ -727,6 +728,8 @@ export default function PipelineMonitorPage() {
             Prompt and model filters apply to analysis runs and the reviews of them.
           </p>
         </div>
+
+        <BulkRunsCard refresh={tick} />
 
         {notice && (
           <p role="status" className="mt-4 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white">

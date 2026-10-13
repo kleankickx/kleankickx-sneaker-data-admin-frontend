@@ -15,6 +15,7 @@ import VerificationPage from "../pages/VerificationPage";
 import ReviewQueuePage from "../pages/ReviewQueuePage";
 import PipelineMonitorPage from "../pages/PipelineMonitorPage";
 import PipelineRunPage from "../pages/PipelineRunPage";
+import BulkRunPage from "../pages/BulkRunPage";
 import AccountPage from "../pages/AccountPage";
 import UsersPage from "../pages/UsersPage";
 import RolesPage from "../pages/RolesPage";
@@ -56,6 +57,7 @@ export const router = createBrowserRouter([
       { path: "review-queue", element: gated(["verify_pairs"], <ReviewQueuePage />) },
       { path: "pipeline-monitor", element: gated(["view_pipeline"], <PipelineMonitorPage />) },
       { path: "pipeline-monitor/runs/:runId", element: gated(["view_pipeline"], <PipelineRunPage />) },
+      { path: "pipeline-monitor/bulk/:bulkId", element: gated(["view_pipeline"], <BulkRunPage />) },
 
       /* Everyone: their own account. */
       { path: "account", element: <AccountPage /> },
