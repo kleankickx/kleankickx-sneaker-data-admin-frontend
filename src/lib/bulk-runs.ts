@@ -23,6 +23,8 @@ export interface BulkRun {
   scope: string;
   overrides: PipelineOverrides;
   is_test: boolean;
+  /* Each pair's run stops after this stage; 7 is the whole pipeline. */
+  to_stage: number;
   created_by: string | null;
   created_at: string;
   finished_at: string | null;
@@ -37,7 +39,7 @@ export interface BulkItem {
   model: string;
   status: BulkItemStatus;
   error: string;
-  /* "rate_limited", "quota", "unavailable", "photos", "vision", "pipeline" */
+  /* "rate_limited", "quota", "unavailable", "photos", "vision", "label", "pipeline" */
   error_kind: string;
   attempts: number;
   next_attempt_at: string | null;
@@ -47,6 +49,8 @@ export interface BulkItem {
   run_status: string | null;
   duration_ms: number | null;
   result: Record<"brand" | "model" | "sku" | "size", { value: string | null; confidence: number } | null> | null;
+  /* A partial run saves no result: what its last stage found instead. */
+  summary: string;
 }
 
 export interface BulkPreview {
@@ -70,7 +74,7 @@ export async function previewBulkRun(selection: BulkSelection): Promise<BulkPrev
 }
 
 export async function startBulkRun(
-  selection: BulkSelection & { overrides?: PipelineOverrides; is_test?: boolean },
+  selection: BulkSelection & { overrides?: PipelineOverrides; is_test?: boolean; to_stage?: number },
 ): Promise<BulkRun> {
   const response = await api.post("/pipeline-bulk-runs/", selection);
   return response.data.data;
@@ -137,3 +141,6 @@ export const BULK_STATUS: Record<BulkStatus, { label: string; badge: string }> =
 export function done(counts: BulkCounts) {
   return counts.succeeded + counts.needs_attention + counts.failed + counts.skipped + counts.cancelled;
 }
+
+/** The last stage, i.e. the whole pipeline. */
+export const LAST_STAGE = 7;

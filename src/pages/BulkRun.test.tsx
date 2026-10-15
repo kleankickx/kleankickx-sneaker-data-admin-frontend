@@ -44,7 +44,7 @@ vi.mock("../lib/auth-context", () => ({
 const RUN: BulkRun = {
   id: "bulk-1", label: "BATCH-0007: 4 pairs", status: "paused",
   pause_reason: "The vision provider's quota or billing limit was reached: insufficient_quota.",
-  source_batch: "b1", scope: "no_result", overrides: { prompt_version: "fdc-v2" }, is_test: false,
+  source_batch: "b1", scope: "no_result", overrides: { prompt_version: "fdc-v2" }, is_test: false, to_stage: 7,
   created_by: "ops", created_at: "2026-10-13T10:00:00Z", finished_at: null,
   counts: { queued: 1, running: 0, succeeded: 1, needs_attention: 1, failed: 1, skipped: 0, cancelled: 0, total: 4, waiting_retry: 0 },
 };
@@ -53,7 +53,7 @@ function item(id: string, status: BulkItem["status"], extra: Partial<BulkItem> =
   return {
     id, sneaker_pair: `p-${id}`, sneaker_pair_id: `KKX-PAIR-${id}`, brand: "", model: "", status,
     error: "", error_kind: "", attempts: 1, next_attempt_at: null, started_at: null, finished_at: null,
-    run: `run-${id}`, run_status: "completed", duration_ms: 4200, result: null, ...extra,
+    run: `run-${id}`, run_status: "completed", duration_ms: 4200, result: null, summary: "", ...extra,
   };
 }
 
@@ -116,6 +116,43 @@ describe("starting a bulk run", () => {
     // You hear about it when it finishes, wherever you are.
     expect(screen.getByText(/Bulk run started/)).toBeInTheDocument();
     expect(watchedBulkRuns()).toEqual(["bulk-9"]);
+  });
+
+  it("runs the selected pairs up to the label reader only", async () => {
+    vi.mocked(getPipelineOptions).mockResolvedValue({
+      stages: ["Load photos", "Quality check", "Label reader", "Catalog lookup", "Vision model",
+        "Fusion + validation", "Save + route"].map((name, i) => ({ stage: i + 1, name })),
+      providers: [{ name: "openai", default_model: "gpt", is_default: true }],
+      prompt_versions: ["fdc-v2"], default_prompt_version: "fdc-v2", ocr_backends: ["tesseract", "none"],
+    });
+    vi.mocked(startBulkRun).mockResolvedValue({ ...RUN, id: "bulk-10", status: "running", to_stage: 3 });
+    render(
+      <MemoryRouter initialEntries={["/batches/b1"]}>
+        <Routes>
+          <Route path="/batches/b1" element={
+            <BulkRunModal batchId="b1" batchLabel="BATCH-0007" pairIds={["p-1", "p-2"]} onClose={() => {}} />
+          } />
+          <Route path="/pipeline-monitor/bulk/:id" element={<p>Bulk page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/2 selected pairs/)).toBeInTheDocument();
+    // Picked pairs: no choosing by scope
+    expect(screen.queryByText("Which pairs")).not.toBeInTheDocument();
+    await waitFor(() => expect(previewBulkRun).toHaveBeenCalledWith({ pairs: ["p-1", "p-2"] }));
+
+    fireEvent.change(await screen.findByLabelText(/Run up to/), { target: { value: "3" } });
+    expect(screen.getByText(/Nothing is saved to the pairs. No vision model calls./)).toBeInTheDocument();
+    // Test runs and vision settings don't apply when stopping at the labels
+    expect(screen.queryByLabelText(/Test run/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Prompt version")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("OCR"), { target: { value: "none" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Run 2 pairs" }));
+
+    await waitFor(() => expect(startBulkRun).toHaveBeenCalledWith({
+      pairs: ["p-1", "p-2"], is_test: false, overrides: { ocr_backend: "none" }, to_stage: 3,
+    }));
   });
 });
 

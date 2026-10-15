@@ -5,7 +5,18 @@ import { watchBulkRun } from "../../lib/activity";
 import { getPipelineOptions, type PipelineOptions } from "../../lib/api";
 import { toast } from "../../lib/toast";
 import { readApiError } from "../../lib/api-errors";
-import { previewBulkRun, startBulkRun, type BulkPreview, type BulkScope } from "../../lib/bulk-runs";
+import {
+  LAST_STAGE,
+  previewBulkRun,
+  startBulkRun,
+  type BulkPreview,
+  type BulkScope,
+  type BulkSelection,
+} from "../../lib/bulk-runs";
+import InfoTip from "../ui/InfoTip";
+
+const VISION_STAGE = 5;
+const LABEL_STAGE = 3;
 
 const SCOPES: { value: BulkScope; label: string; hint: string }[] = [
   { value: "no_result", label: "Pairs without a result yet", hint: "Never analysed, or every run failed." },
@@ -14,10 +25,15 @@ const SCOPES: { value: BulkScope; label: string; hint: string }[] = [
   { value: "all", label: "Every pair in the batch", hint: "Including verified pairs." },
 ];
 
-/** Run the pipeline over many pairs of a batch. */
-export default function BulkRunModal({ batchId, batchLabel, onClose }: {
+/**
+ * Run the pipeline over many pairs: a batch's pairs by scope, or the
+ * pairs you picked (`pairIds`), optionally stopping after a stage.
+ */
+export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: {
   batchId: string;
   batchLabel: string;
+  /* Run exactly these pairs instead of choosing by scope. */
+  pairIds?: string[];
   onClose: () => void;
 }) {
   const navigate = useNavigate();
@@ -28,6 +44,8 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [ocr, setOcr] = useState("");
+  const [toStage, setToStage] = useState(LAST_STAGE);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -35,16 +53,19 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
     getPipelineOptions().then(setOptions).catch(() => {});
   }, []);
 
+  // A string, so a new array with the same pairs doesn't refetch.
+  const picked = pairIds?.join(",") ?? "";
   useEffect(() => {
     let live = true;
-    previewBulkRun({ batch: batchId, scope }).then(
+    const selection: BulkSelection = picked ? { pairs: picked.split(",") } : { batch: batchId, scope };
+    previewBulkRun(selection).then(
       (data) => live && setPreview({ scope, data }),
       (err) => live && setError(readApiError(err, "Couldn't count the pairs.").message),
     );
     return () => {
       live = false;
     };
-  }, [batchId, scope]);
+  }, [batchId, scope, picked]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onClose();
@@ -59,10 +80,21 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
     setBusy(true);
     setError("");
     try {
+      const usesVision = toStage >= VISION_STAGE;
       const overrides = Object.fromEntries(
-        Object.entries({ provider, model: model.trim(), prompt_version: prompt }).filter(([, v]) => v),
+        Object.entries({
+          ocr_backend: ocr,
+          ...(usesVision ? { provider, model: model.trim(), prompt_version: prompt } : {}),
+        }).filter(([, v]) => v),
       );
-      const bulk = await startBulkRun({ batch: batchId, scope, is_test: isTest, overrides });
+      const selection: BulkSelection = pairIds ? { pairs: pairIds } : { batch: batchId, scope };
+      const bulk = await startBulkRun({
+        ...selection,
+        // Test runs only matter when results are saved (the last stage).
+        is_test: toStage === LAST_STAGE && isTest,
+        overrides,
+        ...(toStage < LAST_STAGE ? { to_stage: toStage } : {}),
+      });
       // You'll get a notification when it finishes, wherever you are.
       watchBulkRun(bulk.id);
       toast.success("We'll let you know when it finishes.", { title: `Bulk run started: ${bulk.label}` });
@@ -81,7 +113,10 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
         <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Run the pipeline</h2>
-            <p className="mt-0.5 font-mono text-xs text-gray-500">{batchLabel}</p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              <span className="font-mono">{batchLabel}</span>
+              {pairIds && ` · ${pairIds.length} selected pair${pairIds.length === 1 ? "" : "s"}`}
+            </p>
           </div>
           <button type="button" onClick={onClose} disabled={busy} aria-label="Close" className="text-gray-400 hover:text-gray-700">
             <span aria-hidden="true" className="material-symbols-outlined">close</span>
@@ -89,7 +124,7 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
         </div>
 
         <div className="space-y-5 px-6 py-5">
-          <fieldset>
+          {!pairIds && <fieldset>
             <legend className="mb-2 text-sm font-medium text-gray-700">Which pairs</legend>
             <div className="space-y-1.5">
               {SCOPES.map((s) => (
@@ -105,7 +140,32 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
                 </label>
               ))}
             </div>
-          </fieldset>
+          </fieldset>}
+
+          <div>
+            <div className="mb-1.5 flex items-center gap-1">
+              <label htmlFor="bulk-to-stage" className="text-sm font-medium text-gray-700">Run up to</label>
+              <InfoTip label="About running part of the pipeline">
+                Each pair runs from the first stage and stops after the one you pick. Stopping before Save + route
+                saves nothing to the pairs, the review queue or the catalog; open a pair's pipeline panel to see what
+                each stage found. Stopping before the vision model makes no calls to it at all.
+              </InfoTip>
+            </div>
+            <select id="bulk-to-stage" value={toStage} onChange={(e) => setToStage(Number(e.target.value))} className={select}>
+              {(options?.stages ?? []).map((s) => (
+                <option key={s.stage} value={s.stage}>
+                  {s.stage === LAST_STAGE ? `The whole pipeline (${s.stage}. ${s.name})` : `${s.stage}. ${s.name}`}
+                  {s.stage === LABEL_STAGE ? " (labels only)" : ""}
+                </option>
+              ))}
+              {!options && <option value={LAST_STAGE}>The whole pipeline</option>}
+            </select>
+            {toStage < LAST_STAGE && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                Nothing is saved to the pairs.{toStage < VISION_STAGE && " No vision model calls."}
+              </p>
+            )}
+          </div>
 
           <div className="rounded-xl bg-gray-50 px-4 py-3 text-sm" aria-live="polite">
             {current ? (
@@ -118,7 +178,9 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
                   <p key={s.reason} className="text-xs text-gray-500">{s.pairs} skipped: {s.reason}</p>
                 ))}
                 <p className="mt-1 text-xs text-gray-500">
-                  {current.concurrency} at a time, paced to the vision provider's limits. Rate-limited pairs wait and retry by themselves.
+                  {toStage >= VISION_STAGE
+                    ? `${current.concurrency} at a time, paced to the vision provider's limits. Rate-limited pairs wait and retry by themselves.`
+                    : `${current.concurrency} at a time.`}
                 </p>
                 {tooMany && <p className="mt-1 text-xs text-red-700">That's over the limit of {current.max_pairs} pairs per bulk run.</p>}
               </>
@@ -127,17 +189,29 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
             )}
           </div>
 
-          <label className="flex items-start gap-3">
+          {toStage === LAST_STAGE && <label className="flex items-start gap-3">
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-gray-900" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
             <span>
               <span className="block text-sm font-medium text-gray-900">Test run</span>
               <span className="block text-xs text-gray-500">Results don't replace the pairs' current results, the review queue or the catalog.</span>
             </span>
-          </label>
+          </label>}
 
           <details>
-            <summary className="cursor-pointer text-sm font-medium text-gray-700">Provider and prompt</summary>
+            <summary className="cursor-pointer text-sm font-medium text-gray-700">
+              {toStage >= VISION_STAGE ? "Provider, prompt and OCR" : "OCR"}
+            </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {toStage >= LABEL_STAGE && (
+                <label className="text-xs font-medium text-gray-600">
+                  OCR
+                  <select aria-label="OCR" value={ocr} onChange={(e) => setOcr(e.target.value)} className={`mt-1 ${select}`}>
+                    <option value="">Default</option>
+                    {options?.ocr_backends.map((b) => <option key={b} value={b}>{b === "none" ? "Off (barcodes only)" : b}</option>)}
+                  </select>
+                </label>
+              )}
+              {toStage >= VISION_STAGE && <>
               <label className="text-xs font-medium text-gray-600">
                 Provider
                 <select aria-label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)} className={`mt-1 ${select}`}>
@@ -156,6 +230,7 @@ export default function BulkRunModal({ batchId, batchLabel, onClose }: {
                   {options?.prompt_versions.map((v) => <option key={v} value={v}>{v}</option>)}
                 </select>
               </label>
+              </>}
             </div>
           </details>
 
