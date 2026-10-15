@@ -169,6 +169,8 @@ export interface AnalysisRun {
   model_name: string;
   vlm_used: boolean;
   vlm_error: string;
+  /* Labels and catalog only (vision model off): suggestions, never queued for review. */
+  first_pass?: boolean;
   duration_ms: number | null;
   created_at: string;
 }

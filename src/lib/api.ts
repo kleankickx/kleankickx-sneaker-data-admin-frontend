@@ -1282,6 +1282,8 @@ export interface PipelineOverrides {
   model?: string;
   prompt_version?: string;
   ocr_backend?: string;
+  /* false: labels and catalog only, no vision model (a first pass). */
+  use_vlm?: boolean;
 }
 
 /* Matches PipelineRunViewSet.options. */
@@ -1348,6 +1350,8 @@ export interface PipelineRunSummary {
   status: PipelineRunStatus;
   mode: PipelineMode;
   is_test: boolean;
+  /* Labels and catalog only (vision model off). */
+  first_pass?: boolean;
   prompt_version: string;
   model_name: string;
   created_at: string;

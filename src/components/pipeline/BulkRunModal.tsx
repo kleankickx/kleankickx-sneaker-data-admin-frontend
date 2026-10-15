@@ -45,7 +45,9 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [ocr, setOcr] = useState("");
-  const [toStage, setToStage] = useState(LAST_STAGE);
+  /* "full", "labels" (labels and catalog, saved as suggestions) or the
+     number of the stage to stop after (nothing saved). */
+  const [plan, setPlan] = useState("full");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -73,6 +75,10 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
 
+  const labelsOnly = plan === "labels";
+  const toStage = plan === "full" || labelsOnly ? LAST_STAGE : Number(plan);
+  const usesVision = !labelsOnly && toStage >= VISION_STAGE;
+
   const current = preview?.scope === scope ? preview.data : null;
   const tooMany = current ? current.pairs > current.max_pairs : false;
 
@@ -80,13 +86,15 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
     setBusy(true);
     setError("");
     try {
-      const usesVision = toStage >= VISION_STAGE;
-      const overrides = Object.fromEntries(
-        Object.entries({
-          ocr_backend: ocr,
-          ...(usesVision ? { provider, model: model.trim(), prompt_version: prompt } : {}),
-        }).filter(([, v]) => v),
-      );
+      const overrides = {
+        ...Object.fromEntries(
+          Object.entries({
+            ocr_backend: ocr,
+            ...(usesVision ? { provider, model: model.trim(), prompt_version: prompt } : {}),
+          }).filter(([, v]) => v),
+        ),
+        ...(labelsOnly ? { use_vlm: false } : {}),
+      };
       const selection: BulkSelection = pairIds ? { pairs: pairIds } : { batch: batchId, scope };
       const bulk = await startBulkRun({
         ...selection,
@@ -144,22 +152,31 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
 
           <div>
             <div className="mb-1.5 flex items-center gap-1">
-              <label htmlFor="bulk-to-stage" className="text-sm font-medium text-gray-700">Run up to</label>
-              <InfoTip label="About running part of the pipeline">
-                Each pair runs from the first stage and stops after the one you pick. Stopping before Save + route
-                saves nothing to the pairs, the review queue or the catalog; open a pair's pipeline panel to see what
-                each stage found. Stopping before the vision model makes no calls to it at all.
+              <label htmlFor="bulk-plan" className="text-sm font-medium text-gray-700">What to run</label>
+              <InfoTip label="About what to run">
+                <b>Labels and catalog only</b> is a free first pass: each pair's label is read and looked up in the
+                catalog, and the result is saved as the pair's suggestions to use in verification. It skips the vision
+                model and doesn't send pairs to the review queue; run the whole pipeline on them later.{" "}
+                <b>Stop early</b> saves nothing at all: open a pair's pipeline panel to see what each stage found.
               </InfoTip>
             </div>
-            <select id="bulk-to-stage" value={toStage} onChange={(e) => setToStage(Number(e.target.value))} className={select}>
-              {(options?.stages ?? []).map((s) => (
-                <option key={s.stage} value={s.stage}>
-                  {s.stage === LAST_STAGE ? `The whole pipeline (${s.stage}. ${s.name})` : `${s.stage}. ${s.name}`}
-                  {s.stage === LABEL_STAGE ? " (labels only)" : ""}
-                </option>
-              ))}
-              {!options && <option value={LAST_STAGE}>The whole pipeline</option>}
+            <select id="bulk-plan" value={plan} onChange={(e) => setPlan(e.target.value)} className={select}>
+              <option value="full">The whole pipeline</option>
+              <option value="labels">Labels and catalog only (saves suggestions, no vision model)</option>
+              <optgroup label="Stop early (nothing saved)">
+                {(options?.stages ?? []).filter((s) => s.stage < LAST_STAGE).map((s) => (
+                  <option key={s.stage} value={String(s.stage)}>
+                    Up to {s.stage}. {s.name}{s.stage === LABEL_STAGE ? " (check labels)" : ""}
+                  </option>
+                ))}
+              </optgroup>
             </select>
+            {labelsOnly && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                Saves each pair's label and catalog results as suggestions. No vision model calls, and nothing goes to
+                the review queue.
+              </p>
+            )}
             {toStage < LAST_STAGE && (
               <p className="mt-1.5 text-xs text-gray-500">
                 Nothing is saved to the pairs.{toStage < VISION_STAGE && " No vision model calls."}
@@ -178,7 +195,7 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
                   <p key={s.reason} className="text-xs text-gray-500">{s.pairs} skipped: {s.reason}</p>
                 ))}
                 <p className="mt-1 text-xs text-gray-500">
-                  {toStage >= VISION_STAGE
+                  {usesVision
                     ? `${current.concurrency} at a time, paced to the vision provider's limits. Rate-limited pairs wait and retry by themselves.`
                     : `${current.concurrency} at a time.`}
                 </p>
@@ -199,7 +216,7 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
 
           <details>
             <summary className="cursor-pointer text-sm font-medium text-gray-700">
-              {toStage >= VISION_STAGE ? "Provider, prompt and OCR" : "OCR"}
+              {usesVision ? "Provider, prompt and OCR" : "OCR"}
             </summary>
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               {toStage >= LABEL_STAGE && (
@@ -211,7 +228,7 @@ export default function BulkRunModal({ batchId, batchLabel, pairIds, onClose }: 
                   </select>
                 </label>
               )}
-              {toStage >= VISION_STAGE && <>
+              {usesVision && <>
               <label className="text-xs font-medium text-gray-600">
                 Provider
                 <select aria-label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)} className={`mt-1 ${select}`}>

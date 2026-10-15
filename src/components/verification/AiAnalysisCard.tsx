@@ -189,7 +189,19 @@ function Body({
             <p className="text-sm text-gray-700">{result.overall_assessment}</p>
           )}
 
-          {run && !run.vlm_used && (
+          {run?.first_pass && (
+            <p className="mt-3 flex items-start gap-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+              <span className="shrink-0 rounded-full bg-white px-2 py-0.5 font-semibold uppercase tracking-wide text-sky-700 ring-1 ring-inset ring-sky-600/20">
+                Labels only
+              </span>
+              <span>
+                A first pass from the label and the catalog, without the vision model. Use what's right; a full run
+                later adds the rest, and shows "matches" next to anything you've already saved.
+              </span>
+            </p>
+          )}
+
+          {run && !run.vlm_used && !run.first_pass && (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
               The vision model didn't contribute to this run, so only the label
               and catalog were used. Condition and materials weren't assessed.
