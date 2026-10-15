@@ -31,7 +31,10 @@ const CLIENT_HEADERS = {
 export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: CLIENT_HEADERS,
-  timeout: 30000,
+  /* Long work runs in the background worker, so requests are quick; one
+     that takes this long is stuck (see the dropped-request retry below).
+     Slow downloads set their own. */
+  timeout: 15000,
   /* Send cookies on every request. Required for httpOnly auth. */
   withCredentials: true,
 });
@@ -86,6 +89,9 @@ export type ApiErrorCode =
 
 let refreshPromise: Promise<boolean> | null = null;
 
+/* Pause before retrying a request that got no response. */
+export const RETRY_DELAY_MS = 500;
+
 async function refreshSession(): Promise<boolean> {
   try {
     await axios.post(
@@ -139,8 +145,19 @@ api.interceptors.response.use(
       window.dispatchEvent(new Event("kkx:password-change-required"));
     }
 
+    /* No response at all: on some networks an idle connection is dropped
+       silently, and the browser sends the request down it and waits. A
+       fresh attempt gets a new connection and works, so make it once
+       before giving up. (Uploads don't go through here.) */
+    const dropped = !error.response && error.code !== "ERR_CANCELED";
+    if (dropped && original && !original._networkRetry) {
+      original._networkRetry = true;
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+      return api(original);
+    }
+
     /* Problems no page can fix: say so once, wherever it happened. */
-    if (!error.response && error.code !== "ERR_CANCELED") {
+    if (dropped) {
       toast.error("Check your connection and try again.", { title: "Can't reach the server" });
     } else if (status && status >= 500) {
       toast.error("Something went wrong on the server. Try again in a moment.", { title: "Server error" });
