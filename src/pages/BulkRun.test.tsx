@@ -142,7 +142,7 @@ describe("starting a bulk run", () => {
     expect(screen.queryByText("Which pairs")).not.toBeInTheDocument();
     await waitFor(() => expect(previewBulkRun).toHaveBeenCalledWith({ pairs: ["p-1", "p-2"] }));
 
-    fireEvent.change(await screen.findByLabelText(/Run up to/), { target: { value: "3" } });
+    fireEvent.change(await screen.findByLabelText(/What to run/), { target: { value: "3" } });
     expect(screen.getByText(/Nothing is saved to the pairs. No vision model calls./)).toBeInTheDocument();
     // Test runs and vision settings don't apply when stopping at the labels
     expect(screen.queryByLabelText(/Test run/)).not.toBeInTheDocument();
@@ -152,6 +152,30 @@ describe("starting a bulk run", () => {
 
     await waitFor(() => expect(startBulkRun).toHaveBeenCalledWith({
       pairs: ["p-1", "p-2"], is_test: false, overrides: { ocr_backend: "none" }, to_stage: 3,
+    }));
+  });
+
+  it("runs a labels-and-catalog first pass that saves suggestions", async () => {
+    vi.mocked(startBulkRun).mockResolvedValue({ ...RUN, id: "bulk-11", status: "running" });
+    render(
+      <MemoryRouter initialEntries={["/batches/b1"]}>
+        <Routes>
+          <Route path="/batches/b1" element={<BulkRunModal batchId="b1" batchLabel="BATCH-0007" onClose={() => {}} />} />
+          <Route path="/pipeline-monitor/bulk/:id" element={<p>Bulk page</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/2 pairs will run/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/What to run/), { target: { value: "labels" } });
+    expect(screen.getByText(/Saves each pair's label and catalog results as suggestions/)).toBeInTheDocument();
+    // Saved like a full run, so a test run still applies; vision settings don't
+    expect(screen.getByLabelText(/Test run/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Prompt version")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run 2 pairs" }));
+
+    await waitFor(() => expect(startBulkRun).toHaveBeenCalledWith({
+      batch: "b1", scope: "no_result", is_test: false, overrides: { use_vlm: false },
     }));
   });
 });

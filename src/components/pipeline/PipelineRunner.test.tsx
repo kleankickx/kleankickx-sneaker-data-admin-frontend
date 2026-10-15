@@ -140,6 +140,20 @@ describe("PipelineRunner", () => {
     expect(await screen.findByRole("button", { name: /^1\. Load photos: Running/ })).toBeInTheDocument();
   });
 
+  it("runs labels and catalog only, keeping the vision model switched off", async () => {
+    vi.mocked(startPipelineRun).mockResolvedValue(runState({ status: "queued", overrides: { use_vlm: false } }));
+    await renderRunner();
+
+    fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+    fireEvent.click(screen.getByLabelText(/Labels and catalog only/));
+    fireEvent.click(screen.getByRole("button", { name: "Run all stages" }));
+
+    await waitFor(() => expect(startPipelineRun).toHaveBeenCalledWith(expect.objectContaining({
+      mode: "all", overrides: { use_vlm: false },
+    })));
+    expect(await screen.findByText("Labels only")).toBeInTheDocument();
+  });
+
   it("shows the flow and runs up to the selected stage with overrides", async () => {
     vi.mocked(startPipelineRun).mockResolvedValue(runState({ status: "stopped", mode: "to", to_stage: 3 }));
     await renderRunner();

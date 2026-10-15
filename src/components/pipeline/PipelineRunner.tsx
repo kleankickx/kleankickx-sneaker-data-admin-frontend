@@ -56,6 +56,7 @@ function runLabel(run: PipelineRunSummary) {
     run.prompt_version,
     run.model_name || "no vision model",
     run.is_test ? "test" : null,
+    run.first_pass ? "labels only" : null,
     run.status,
   ]
     .filter(Boolean)
@@ -284,7 +285,8 @@ export default function PipelineRunner({
         ...(mode === "to" || reusesEarlier ? { stage } : {}),
         ...(reusesEarlier && source ? { source_run: source } : {}),
         is_test: isTest,
-        overrides: Object.fromEntries(Object.entries(overrides).filter(([, v]) => v)),
+        // Keep use_vlm: false; drop unset and empty settings.
+        overrides: Object.fromEntries(Object.entries(overrides).filter(([, v]) => v !== undefined && v !== "")),
       });
       setFollowing(true);
       receive.current(started);
@@ -393,7 +395,8 @@ export default function PipelineRunner({
                   <option key={r.id} value={r.id}>
                     {i === 0 ? "Latest · " : ""}
                     {new Date(r.created_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
-                    {r.is_test ? " · test" : ""} · {RUN_STATUS_LABEL[r.status]}
+                    {r.is_test ? " · test" : ""}
+                    {r.first_pass ? " · labels only" : ""} · {RUN_STATUS_LABEL[r.status]}
                   </option>
                 ))}
               </select>
@@ -401,6 +404,11 @@ export default function PipelineRunner({
             {run.is_test && (
               <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-violet-700 ring-1 ring-inset ring-violet-600/20">
                 Test run
+              </span>
+            )}
+            {run.overrides?.use_vlm === false && (
+              <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-sky-700 ring-1 ring-inset ring-sky-600/20">
+                Labels only
               </span>
             )}
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -554,6 +562,21 @@ export default function PipelineRunner({
                     <option key={b} value={b}>{b === "none" ? "none (barcodes only)" : b}</option>
                   ))}
                 </select>
+              </label>
+              <label className="flex items-start gap-2 sm:col-span-2 lg:col-span-4">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-gray-900"
+                  checked={overrides.use_vlm === false}
+                  onChange={(e) => setOverrides((o) => ({ ...o, use_vlm: e.target.checked ? false : undefined }))}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-gray-900">Labels and catalog only</span>
+                  <span className="block text-xs text-gray-500">
+                    Skip the vision model. A saved result gives the pair suggestions from its label and the catalog,
+                    without sending it to the review queue.
+                  </span>
+                </span>
               </label>
               <label className="text-xs font-medium text-gray-600 sm:col-span-2 lg:col-span-4">
                 Reuse stages 1–{Math.max(1, stage - 1)} from
