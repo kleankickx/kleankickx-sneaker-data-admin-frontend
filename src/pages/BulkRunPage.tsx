@@ -30,6 +30,7 @@ const WHY: Record<string, string> = {
   unavailable: "Provider unavailable",
   photos: "No usable photos",
   vision: "No vision model result",
+  label: "Label not read",
   pipeline: "Pipeline error",
 };
 
@@ -240,7 +241,9 @@ export default function BulkRunPage() {
             <InfoTip label="About the statuses" side="bottom">
               <b>Succeeded</b>: the vision model read the pair and every field is 80% or more.{" "}
               <b>Needs attention</b>: it ran, but missed the vision model or a field is under 80%.{" "}
-              <b>Failed</b>: no result. Rate-limited pairs wait and retry on their own before they count as failed.
+              <b>Failed</b>: no result. Rate-limited pairs wait and retry on their own before they count as failed.{" "}
+              In a run that stops early (e.g. labels only), succeeded means its stages worked; for labels, that
+              something was read.
             </InfoTip>
           </p>
           <p className="text-sm tabular-nums text-gray-500">{pct}%</p>
@@ -344,6 +347,8 @@ export default function BulkRunPage() {
                             </span>
                           ))}
                         </span>
+                      ) : item.summary ? (
+                        <span className="text-gray-600">{item.summary}</span>
                       ) : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="max-w-xs px-4 py-3 text-xs">

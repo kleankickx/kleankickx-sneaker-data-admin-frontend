@@ -110,7 +110,7 @@ describe("InfoTip", () => {
 function bulk(id: string, status: BulkRun["status"], extra: Partial<BulkRun> = {}): BulkRun {
   return {
     id, label: `BATCH-0007: ${id}`, status, pause_reason: "", source_batch: "b1", scope: "no_result",
-    overrides: {}, is_test: false, created_by: "ops", created_at: "2026-10-13T10:00:00Z", finished_at: null,
+    overrides: {}, is_test: false, to_stage: 7, created_by: "ops", created_at: "2026-10-13T10:00:00Z", finished_at: null,
     counts: { queued: 0, running: 0, succeeded: 3, needs_attention: 1, failed: 0, skipped: 0, cancelled: 0, total: 4, waiting_retry: 0 },
     ...extra,
   };

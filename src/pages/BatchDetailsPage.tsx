@@ -798,6 +798,10 @@ export default function BatchDetailsPage() {
   const [summaryVersion, setSummaryVersion] = useState(0);
   const [showExport, setShowExport] = useState(false);
   const [showBulkRun, setShowBulkRun] = useState(false);
+  /* Pairs ticked in the table (kept across pages and filters), and the
+     ones the open bulk run dialog is for (undefined: choose by scope). */
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [bulkPairs, setBulkPairs] = useState<string[] | undefined>();
   const [exporting, setExporting] = useState<BatchExportFile | null>(null);
   const pairsRef = useRef<HTMLElement>(null);
 
@@ -1393,6 +1397,18 @@ export default function BatchDetailsPage() {
 
   const { batch } = details;
   const batchLabel = batch.batch_id ?? batch.id;
+  const canPick = can("run_pipeline");
+  const pageAllPicked =
+    details.pairs.length > 0 && details.pairs.every((pair) => picked.has(pair.id));
+
+  function togglePicked(id: string) {
+    setPicked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   /* Render */
   return (
@@ -1745,7 +1761,10 @@ export default function BatchDetailsPage() {
               {can("run_pipeline") && (
                 <button
                   type="button"
-                  onClick={() => setShowBulkRun(true)}
+                  onClick={() => {
+                    setBulkPairs(undefined);
+                    setShowBulkRun(true);
+                  }}
                   className="inline-flex h-9 items-center gap-2 self-start rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 lg:self-auto"
                 >
                   <span className="material-symbols-outlined text-[18px]">
@@ -1980,6 +1999,35 @@ export default function BatchDetailsPage() {
           </div>
         )}
 
+        {/* Ticked pairs */}
+        {canPick && picked.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-6 py-3 text-sm">
+            <span className="font-medium text-gray-900">
+              {picked.size} pair{picked.size === 1 ? "" : "s"} selected
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="h-9 rounded-lg px-3 text-sm font-medium text-gray-600 hover:bg-gray-200"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkPairs([...picked]);
+                  setShowBulkRun(true);
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">model_training</span>
+                Run pipeline on selected
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Table */}
         <div className="overflow-x-auto">
           {details.pairs.length === 0 && !loading ? (
@@ -2016,6 +2064,27 @@ export default function BatchDetailsPage() {
             <table className="min-w-[1150px] w-full">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/80">
+                  {canPick && (
+                    <th className="w-10 py-3.5 pl-6">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all pairs on this page"
+                        className="h-4 w-4 accent-gray-900"
+                        disabled={loading || details.pairs.length === 0}
+                        checked={pageAllPicked}
+                        onChange={() =>
+                          setPicked((current) => {
+                            const next = new Set(current);
+                            for (const pair of details.pairs) {
+                              if (pageAllPicked) next.delete(pair.id);
+                              else next.add(pair.id);
+                            }
+                            return next;
+                          })
+                        }
+                      />
+                    </th>
+                  )}
                   <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Pair
                   </th>
@@ -2062,6 +2131,7 @@ export default function BatchDetailsPage() {
                 {loading
                   ? Array.from({ length: 8 }).map((_, index) => (
                       <tr key={`skeleton-${index}`}>
+                        {canPick && <td className="pl-6" />}
                         <td className="px-6 py-4">
                           <div className="h-4 w-28 animate-pulse rounded bg-gray-200" />
                         </td>
@@ -2107,8 +2177,19 @@ export default function BatchDetailsPage() {
                       return (
                         <tr
                           key={pair.id}
-                          className="group transition-colors hover:bg-gray-50"
+                          className={`group transition-colors hover:bg-gray-50 ${picked.has(pair.id) ? "bg-gray-50" : ""}`}
                         >
+                          {canPick && (
+                            <td className="py-4 pl-6">
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${getPairId(pair)}`}
+                                className="h-4 w-4 accent-gray-900"
+                                checked={picked.has(pair.id)}
+                                onChange={() => togglePicked(pair.id)}
+                              />
+                            </td>
+                          )}
                           <td className="px-6 py-4">
                             <Link
                               to={`/sneakers/${pair.id}`}
@@ -2468,6 +2549,7 @@ export default function BatchDetailsPage() {
         <BulkRunModal
           batchId={batchId}
           batchLabel={batchLabel}
+          pairIds={bulkPairs}
           onClose={() => setShowBulkRun(false)}
         />
       )}
