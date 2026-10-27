@@ -21,6 +21,8 @@ import UsersPage from "../pages/UsersPage";
 import RolesPage from "../pages/RolesPage";
 import AuditLogPage from "../pages/AuditLogPage";
 import LoginPage from "../pages/LoginPage";
+import ForgotPasswordPage from "../pages/ForgotPasswordPage";
+import ResetPasswordPage from "../pages/ResetPasswordPage";
 
 /* The page, for users holding any of `permissions`. */
 function gated(permissions: Permission[], page: ReactNode) {
@@ -35,6 +37,9 @@ export const router = createBrowserRouter([
     path: "/login",
     element: <LoginPage />,
   },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  /* The link in the reset email: ?uid=...&token=... */
+  { path: "/reset-password", element: <ResetPasswordPage /> },
 
   /* ------------------------------------------------------------------
      Protected: everything under AdminLayout requires auth, and each

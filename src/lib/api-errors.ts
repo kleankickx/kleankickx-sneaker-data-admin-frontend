@@ -5,6 +5,8 @@
 
 export interface ApiFormError<Field extends string = string> {
   message: string;
+  /* The backend's error code, e.g. "reset_link_invalid" (empty when none). */
+  code: string;
   fields: Partial<Record<Field, string>>;
 }
 
@@ -15,7 +17,7 @@ export function readApiError<Field extends string = string>(
   const e = error as {
     response?: {
       data?: {
-        error?: { message?: string; fields?: Record<string, unknown> };
+        error?: { message?: string; code?: string; fields?: Record<string, unknown> };
       };
     };
   };
@@ -35,6 +37,7 @@ export function readApiError<Field extends string = string>(
   // body, so it gets the friendly fallback instead of Axios's text.
   return {
     message: nonField || body?.message || fallback,
+    code: body?.code ?? "",
     fields: fields as ApiFormError<Field>["fields"],
   };
 }

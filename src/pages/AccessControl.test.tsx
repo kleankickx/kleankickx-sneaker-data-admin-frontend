@@ -164,7 +164,9 @@ describe("what people see", () => {
     const has = renderLayout();
     expect(["Dashboard", "Batches", "Pipeline monitor"].every(has)).toBe(true);
     expect(has("Verification")).toBe(false);
-    expect(screen.queryByText("Settings")).not.toBeInTheDocument();
+    // Settings holds only their own account
+    expect(has("Account & security")).toBe(true);
+    expect(["Users", "Roles", "Audit log"].some(has)).toBe(false);
   });
 
   it("gives administrators the settings pages", () => {
