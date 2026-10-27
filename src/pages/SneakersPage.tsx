@@ -753,7 +753,7 @@ export default function SneakersPage() {
           <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
             <div className="h-32 animate-pulse bg-gray-100" />
 
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[1100px]">
                 <tbody>
                   {Array.from({ length: 8 }).map(

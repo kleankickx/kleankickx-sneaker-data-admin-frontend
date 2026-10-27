@@ -314,7 +314,7 @@ function RunHealth({
       {health.recent_failures.length === 0 ? (
         <p className="mt-2 text-sm text-gray-500">No failures in this range.</p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
+        <div className="relative mt-2 overflow-x-auto">
           <table className="w-full">
             <thead className="border-b border-gray-100">
               <tr>
@@ -525,7 +525,7 @@ function Review({ review }: { review: PipelineOverview["review"] }) {
       {versions.length === 0 ? (
         <p className="mt-2 text-sm text-gray-500">No reviewed analyses in this range.</p>
       ) : (
-        <div className="mt-2 overflow-x-auto">
+        <div className="relative mt-2 overflow-x-auto">
           <table className="w-full">
             <thead className="border-b border-gray-100">
               <tr>

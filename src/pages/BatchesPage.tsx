@@ -691,7 +691,7 @@ export default function BatchesPage() {
             />
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className="w-full min-w-[850px] text-left">
                   <thead className="border-b border-gray-200 bg-gray-50">
                     <tr>

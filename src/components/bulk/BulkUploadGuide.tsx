@@ -174,7 +174,7 @@ function steps(maxFileSize: number | null): Array<{
             <strong>Choose files</strong>) as long as each name contains the
             pair and the angle.
           </p>
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <div className="relative overflow-x-auto rounded-lg border border-gray-200">
             <table className="w-full text-left text-xs">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
