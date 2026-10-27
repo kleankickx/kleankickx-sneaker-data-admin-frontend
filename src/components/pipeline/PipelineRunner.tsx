@@ -104,7 +104,7 @@ function ResultComparison({
           </button>
         )}
       </div>
-      <div className="mt-3 overflow-x-auto">
+      <div className="relative mt-3 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="border-b border-gray-100">
             <tr>

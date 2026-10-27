@@ -286,7 +286,7 @@ export default function BulkRunPage() {
             </button>
           </div>
         )}
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">

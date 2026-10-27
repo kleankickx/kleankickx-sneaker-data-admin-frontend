@@ -2029,7 +2029,7 @@ export default function BatchDetailsPage() {
         )}
 
         {/* Table */}
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           {details.pairs.length === 0 && !loading ? (
             <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">

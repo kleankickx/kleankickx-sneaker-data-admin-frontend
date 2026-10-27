@@ -254,7 +254,9 @@ export default function AdminLayout() {
   })();
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50 text-gray-900">
+    /* relative: absolutely positioned bits (screen-reader-only text, open
+       tooltips) are clipped here instead of widening the whole page. */
+    <div className="relative flex h-screen overflow-hidden bg-gray-50 text-gray-900">
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 overflow-y-auto border-r border-gray-200 bg-white lg:flex lg:flex-col">
         <SidebarContent />
@@ -404,7 +406,7 @@ export default function AdminLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main className="relative min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>
