@@ -16,7 +16,7 @@ type NavigationItem = {
   name: string;
   path: string;
   icon: string;
-  /* Shown to users holding any of these. */
+  /* Shown to users holding any of these; empty: everyone. */
   permissions: Permission[];
 };
 
@@ -30,6 +30,7 @@ const navigation: NavigationItem[] = [
 ];
 
 const settings: NavigationItem[] = [
+  { name: "Account & security", path: "/account", icon: "manage_accounts", permissions: [] },
   { name: "Users", path: "/settings/users", icon: "group", permissions: ["manage_users"] },
   { name: "Roles", path: "/settings/roles", icon: "admin_panel_settings", permissions: ["manage_roles", "manage_users"] },
   { name: "Audit log", path: "/settings/audit-log", icon: "history", permissions: ["view_audit_log"] },
@@ -63,7 +64,7 @@ function SidebarContent({
 }) {
   const { can } = useAuth();
   const items = navigation.filter((item) => item.permissions.some(can));
-  const settingsItems = settings.filter((item) => item.permissions.some(can));
+  const settingsItems = settings.filter((item) => !item.permissions.length || item.permissions.some(can));
 
   const link = (item: NavigationItem) => (
     <NavLink

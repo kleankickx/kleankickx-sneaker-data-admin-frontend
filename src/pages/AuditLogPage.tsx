@@ -15,6 +15,8 @@ const TONE: Record<string, string> = {
   mfa_disabled: "bg-amber-50 text-amber-700 ring-amber-600/20",
   mfa_reset: "bg-amber-50 text-amber-700 ring-amber-600/20",
   password_reset: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  password_reset_requested: "bg-sky-50 text-sky-700 ring-sky-600/20",
+  password_reset_by_email: "bg-amber-50 text-amber-700 ring-amber-600/20",
   login_succeeded: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 

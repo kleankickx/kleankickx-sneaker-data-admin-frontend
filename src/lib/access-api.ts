@@ -96,6 +96,22 @@ export async function regenerateRecoveryCodes(code: string): Promise<string[]> {
   return response.data.data.recovery_codes;
 }
 
+/**
+ * "Forgot password": emails a reset link to the account with this username
+ * or email, if there is one (the reply doesn't say). emailEnabled is false
+ * when the server can't send email.
+ */
+export async function requestPasswordReset(identifier: string): Promise<{ emailEnabled: boolean }> {
+  const response = await api.post("/auth/password/reset/", { identifier });
+  return { emailEnabled: Boolean(response.data.data.email_enabled) };
+}
+
+/** Set a new password from an emailed link; returns the account's username. */
+export async function confirmPasswordReset(uid: string, token: string, newPassword: string): Promise<string> {
+  const response = await api.post("/auth/password/reset/confirm/", { uid, token, new_password: newPassword });
+  return response.data.data.username;
+}
+
 export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthUser> {
   const response = await api.post("/auth/password/change/", {
     current_password: currentPassword,

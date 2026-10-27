@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import {
+  Link,
   Navigate,
+  useLocation,
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
@@ -28,13 +30,17 @@ function getErrorMessage(error: any) {
 export default function LoginPage() {
   const { user, login, completeLogin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [searchParams] = useSearchParams();
 
   const continueTo = searchParams.get("continue") || "/";
   const reason = searchParams.get("reason");
 
-  const [username, setUsername] = useState("");
+  /* After a password reset, the account it was for. */
+  const [username, setUsername] = useState(
+    () => (location.state as { username?: string } | null)?.username ?? "",
+  );
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +57,8 @@ export default function LoginPage() {
       setNotice(
         "Your session expired. Please sign in again to continue.",
       );
+    } else if (reason === "password_reset") {
+      setNotice("Your password was changed. Sign in with the new one.");
     }
   }, [reason]);
 
@@ -251,12 +259,22 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="mb-1.5 block text-sm font-medium text-gray-700"
-              >
-                Password
-              </label>
+              <div className="mb-1.5 flex items-center justify-between">
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Password
+                </label>
+
+                <Link
+                  to="/forgot-password"
+                  state={{ username: username.trim() }}
+                  className="text-xs font-medium text-gray-500 underline underline-offset-2 hover:text-gray-800"
+                >
+                  Forgot password?
+                </Link>
+              </div>
 
               <div className="relative">
                 <input
