@@ -470,7 +470,7 @@ export async function getBatchDetails(
 export interface BatchSummary {
   batch_id: string;
   name: string;
-  expected_quantity: number;
+  expected_quantity: number | null;
   total_pairs: number;
   complete_pairs: number;
   pairs_without_images: number;

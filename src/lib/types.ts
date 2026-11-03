@@ -14,7 +14,8 @@ export interface Batch {
   batch_id?: string;
   name: string;
   source: string;
-  expected_quantity: number;
+  /* null for batches filled by KleanKickx orders: no quantity is known up front. */
+  expected_quantity: number | null;
   status: string;
   received_at: string | null;
   created_at: string;
