@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import RecentActivity from "../components/dashboard/RecentActivity";
 import { getDashboardStats } from "../lib/api";
 
 type DashboardStatsView = {
@@ -186,7 +187,7 @@ export default function DashboardPage() {
             </h2>
 
             <p className="mt-1 text-sm text-gray-500">
-              Recent data collection activity will appear here.
+              The latest batches, pairs, photos and verifications.
             </p>
           </div>
 
@@ -196,25 +197,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white">
-          <div className="flex min-h-48 flex-col items-center justify-center px-6 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-              <MaterialIcon
-                name="history"
-                className="text-[24px] text-gray-400"
-              />
-            </div>
-
-            <p className="mt-4 text-sm font-medium text-gray-700">
-              No recent activity
-            </p>
-
-            <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
-              Collection and verification activity will appear here
-              as data is processed.
-            </p>
-          </div>
-        </div>
+        <RecentActivity />
       </section>
     </div>
   );
