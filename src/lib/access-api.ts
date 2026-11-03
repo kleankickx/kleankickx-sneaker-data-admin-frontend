@@ -22,7 +22,8 @@ export type Permission =
   | "promote_pipeline_runs"
   | "manage_users"
   | "manage_roles"
-  | "view_audit_log";
+  | "view_audit_log"
+  | "manage_integrations";
 
 export interface PermissionInfo {
   codename: Permission;
@@ -280,7 +281,7 @@ export interface AuditEvent {
   action_label: string;
   actor: { id: string; username: string } | null;
   actor_label: string;
-  target_type: "" | "user" | "role";
+  target_type: "" | "user" | "role" | "integration_key";
   target_id: string;
   target_label: string;
   details: Record<string, unknown>;
@@ -306,5 +307,36 @@ export async function listAuditEvents(filters: AuditFilters = {}): Promise<Page<
 
 export async function getAuditActions(): Promise<{ value: string; label: string }[]> {
   const response = await api.get("/audit-events/actions/");
+  return response.data.data;
+}
+
+/* ============================================================
+   INTEGRATION KEYS (Settings → Integrations)
+   ============================================================ */
+
+export interface IntegrationKey {
+  id: string;
+  name: string;
+  key_id: string;
+  is_active: boolean;
+  last_used_at: string | null;
+  created_at: string;
+  created_by: string | null;
+  pair_count: number | null;
+}
+
+export async function listIntegrationKeys(): Promise<IntegrationKey[]> {
+  const response = await api.get("/integration-keys/");
+  return response.data.data;
+}
+
+/* The token is in this response only; the platform keeps just a hash. */
+export async function issueIntegrationKey(name: string): Promise<{ key: IntegrationKey; token: string }> {
+  const response = await api.post("/integration-keys/", { name });
+  return response.data.data;
+}
+
+export async function deactivateIntegrationKey(id: string): Promise<IntegrationKey> {
+  const response = await api.post(`/integration-keys/${id}/deactivate/`);
   return response.data.data;
 }

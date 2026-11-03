@@ -20,6 +20,7 @@ import AccountPage from "../pages/AccountPage";
 import UsersPage from "../pages/UsersPage";
 import RolesPage from "../pages/RolesPage";
 import AuditLogPage from "../pages/AuditLogPage";
+import IntegrationsPage from "../pages/IntegrationsPage";
 import LoginPage from "../pages/LoginPage";
 import ForgotPasswordPage from "../pages/ForgotPasswordPage";
 import ResetPasswordPage from "../pages/ResetPasswordPage";
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
       /* Settings */
       { path: "settings/users", element: gated(["manage_users"], <UsersPage />) },
       { path: "settings/roles", element: gated(["manage_roles", "manage_users"], <RolesPage />) },
+      { path: "settings/integrations", element: gated(["manage_integrations"], <IntegrationsPage />) },
       { path: "settings/audit-log", element: gated(["view_audit_log"], <AuditLogPage />) },
     ],
   },
