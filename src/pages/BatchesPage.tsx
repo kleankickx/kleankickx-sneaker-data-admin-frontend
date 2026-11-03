@@ -222,8 +222,8 @@ export default function BatchesPage() {
 
             case "expected_quantity":
               return (
-                (a.expected_quantity -
-                  b.expected_quantity) *
+                ((a.expected_quantity ?? -1) -
+                  (b.expected_quantity ?? -1)) *
                 direction
               );
 
@@ -811,7 +811,7 @@ export default function BatchesPage() {
                           {/* Quantity */}
                           <td className="px-5 py-4">
                             <span className="text-sm font-medium text-gray-800">
-                              {batch.expected_quantity.toLocaleString()}
+                              {batch.expected_quantity?.toLocaleString() ?? "—"}
                             </span>
                           </td>
 

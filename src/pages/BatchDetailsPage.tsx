@@ -971,7 +971,7 @@ export default function BatchDetailsPage() {
 
     setEditName(details.batch.name);
     setEditSource(details.batch.source);
-    setEditQuantity(String(details.batch.expected_quantity));
+    setEditQuantity(details.batch.expected_quantity?.toString() ?? "");
   }, [details]);
 
   /* Filter options */
@@ -1282,14 +1282,15 @@ export default function BatchDetailsPage() {
 
     if (!batchId) return;
 
-    const quantity = Number(editQuantity);
+    /* Empty = leave it unset (batches filled by KleanKickx orders have none). */
+    const quantity = editQuantity.trim() === "" ? undefined : Number(editQuantity);
 
     if (!editName.trim()) {
       showToast("error", "Batch name is required.");
       return;
     }
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
+    if (quantity !== undefined && (!Number.isInteger(quantity) || quantity <= 0)) {
       showToast(
         "error",
         "Expected quantity must be a positive whole number.",
@@ -1303,7 +1304,7 @@ export default function BatchDetailsPage() {
       const updated = await updateBatch(batchId, {
         name: editName.trim(),
         source: editSource.trim(),
-        expected_quantity: quantity,
+        ...(quantity !== undefined && { expected_quantity: quantity }),
       });
 
       setDetails((current) =>
@@ -1610,11 +1611,11 @@ export default function BatchDetailsPage() {
             </p>
 
             <p className="mt-2 text-xl font-semibold text-gray-900">
-              {batch.expected_quantity.toLocaleString()}
+              {batch.expected_quantity?.toLocaleString() ?? "—"}
             </p>
 
             <p className="mt-1 text-xs text-gray-500">
-              Expected pairs
+              {batch.expected_quantity == null ? "Not set" : "Expected pairs"}
             </p>
           </div>
 
