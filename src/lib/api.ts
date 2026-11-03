@@ -647,6 +647,31 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   return response.data.data;
 }
 
+export type ActivityType =
+  | "batch_created"
+  | "order_pairs"
+  | "pairs_added"
+  | "photos_uploaded"
+  | "identified"
+  | "verified";
+
+export interface ActivityItem {
+  type: ActivityType;
+  at: string;
+  title: string;
+  detail: string;
+  link: { kind: "batch" | "pair"; id: string } | null;
+}
+
+export async function getDashboardActivity(limit = 15): Promise<ActivityItem[]> {
+  const response = await api.get<ApiResponse<ActivityItem[]>>(
+    "/dashboard/activity/",
+    { params: { limit } },
+  );
+
+  return response.data.data;
+}
+
 
 export interface PairUploadSlot {
   angle: string;
