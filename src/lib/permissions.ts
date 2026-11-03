@@ -17,6 +17,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   manage_users: "Manage users",
   manage_roles: "Manage roles",
   view_audit_log: "View the audit log",
+  manage_integrations: "Manage integrations",
 };
 
 export function formatWhen(value: string | null | undefined) {

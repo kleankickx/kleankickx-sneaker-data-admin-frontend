@@ -18,7 +18,7 @@ import type { ConfirmOptions } from "../ui/ConfirmDialog";
 import { useConfirm } from "../ui/useConfirm";
 import { OneTimeSecret } from "./SecretReveal";
 
-const field =
+export const field =
   "h-10 w-full rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-gray-500 focus:ring-2 focus:ring-gray-200";
 
 /* Roles you can hand out: their permissions are a subset of yours. */
@@ -91,7 +91,7 @@ function RolePicker({
   );
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);

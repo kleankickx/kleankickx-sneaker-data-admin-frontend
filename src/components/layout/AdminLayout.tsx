@@ -33,6 +33,7 @@ const settings: NavigationItem[] = [
   { name: "Account & security", path: "/account", icon: "manage_accounts", permissions: [] },
   { name: "Users", path: "/settings/users", icon: "group", permissions: ["manage_users"] },
   { name: "Roles", path: "/settings/roles", icon: "admin_panel_settings", permissions: ["manage_roles", "manage_users"] },
+  { name: "Integrations", path: "/settings/integrations", icon: "key", permissions: ["manage_integrations"] },
   { name: "Audit log", path: "/settings/audit-log", icon: "history", permissions: ["view_audit_log"] },
 ];
 

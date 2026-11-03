@@ -17,6 +17,8 @@ const TONE: Record<string, string> = {
   password_reset: "bg-amber-50 text-amber-700 ring-amber-600/20",
   password_reset_requested: "bg-sky-50 text-sky-700 ring-sky-600/20",
   password_reset_by_email: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  integration_key_issued: "bg-sky-50 text-sky-700 ring-sky-600/20",
+  integration_key_deactivated: "bg-amber-50 text-amber-700 ring-amber-600/20",
   login_succeeded: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
 };
 
@@ -127,6 +129,7 @@ export default function AuditLogPage() {
                     <td className="px-5 py-3 text-gray-800">
                       {e.target_label || "—"}
                       {e.target_type === "role" && <span className="ml-1 text-xs text-gray-400">(role)</span>}
+                      {e.target_type === "integration_key" && <span className="ml-1 text-xs text-gray-400">(integration key)</span>}
                     </td>
                     <td className="px-5 py-3 text-xs text-gray-600">{describe(e.details)}</td>
                     <td className="px-5 py-3 font-mono text-xs text-gray-500">{e.ip_address ?? "—"}</td>
