@@ -264,31 +264,20 @@ export interface BatchesResponse {
   meta: BatchesMeta;
 }
 
+/* Every batch: the API pages them (25 by default), so follow the pages.
+   Filtering and sorting happen on the page, over the whole list. */
 export async function getBatches(): Promise<BatchesResponse> {
-  const response = await api.get<any>("/batches/");
-
-  const body = response?.data ?? {};
-  const data = body?.data ?? body;
-
-  return {
-    results: Array.isArray(data?.results)
-      ? data.results
-      : Array.isArray(data)
-        ? data
-        : [],
-    meta: {
-      count:
-        typeof data?.count === "number"
-          ? data.count
-          : Array.isArray(data?.results)
-            ? data.results.length
-            : Array.isArray(data)
-              ? data.length
-              : 0,
-      next: data?.next ?? null,
-      previous: data?.previous ?? null,
-    },
-  };
+  const results: Batch[] = [];
+  for (let page = 1; page <= 200; page += 1) {   // 200 × 100 batches is far beyond today's numbers
+    const response = await api.get<any>("/batches/", { params: { page, page_size: 100 } });
+    const body = response?.data ?? {};
+    const rows = Array.isArray(body?.data) ? body.data
+      : Array.isArray(body?.data?.results) ? body.data.results
+      : Array.isArray(body?.results) ? body.results : [];
+    results.push(...rows);
+    if (!(body?.meta?.next ?? body?.next)) break;
+  }
+  return { results, meta: { count: results.length, next: null, previous: null } };
 }
 
 export async function getBatch(
@@ -320,6 +309,7 @@ export async function updateBatch(
     name?: string;
     source?: string;
     expected_quantity?: number;
+    received_at?: string | null;
   },
 ): Promise<Batch> {
   const response = await api.patch<ApiResponse<Batch>>(
