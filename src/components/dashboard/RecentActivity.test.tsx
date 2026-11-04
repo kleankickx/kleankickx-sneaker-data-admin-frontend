@@ -36,6 +36,7 @@ describe("RecentActivity", () => {
     renderPanel();
 
     const verified = await screen.findByText("KKX-PAIR-00000412 verified");
+    expect(getDashboardActivity).toHaveBeenCalledWith(4);   // only the latest few
     expect(verified.closest("a")).toHaveAttribute("href", "/sneakers/p1");
     expect(screen.getByText("2 pairs from KleanKickx order FrwMELkA").closest("a")).toHaveAttribute("href", "/batches/b1");
     expect(screen.getByText("by reviewer1 · Nike Air Jordan 1")).toBeInTheDocument();
