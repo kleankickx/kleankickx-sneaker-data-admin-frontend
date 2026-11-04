@@ -37,7 +37,7 @@ export default function RecentActivity() {
 
   useEffect(() => {
     let live = true;
-    getDashboardActivity().then(
+    getDashboardActivity(4).then(   // just the latest few: the dashboard is a glance, not a log
       (list) => live && setItems(list),
       () => live && setError(true),
     );
