@@ -1213,6 +1213,24 @@ export default function BatchDetailsPage() {
   /* Batch confirm handlers                                              */
   /* ------------------------------------------------------------------ */
 
+  /* For sneakers that arrived before anyone photographed them; otherwise the first photo sets it. */
+  async function markReceived() {
+    if (!batchId) return;
+
+    try {
+      setActionLoading(true);
+      const updated = await updateBatch(batchId, { received_at: new Date().toISOString() });
+      setDetails((current) =>
+        current ? { ...current, batch: updated } : current,
+      );
+      showToast("success", "Batch marked as received.");
+    } catch (err) {
+      showToast("error", getErrorMessage(err));
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleOpenBatch() {
     if (!batchId) return;
 
@@ -1643,8 +1661,20 @@ export default function BatchDetailsPage() {
             </p>
 
             <p className="mt-1 text-xs text-gray-500">
-              Physical receipt
+              {batch.received_at ? "Physical receipt" : "Set by the first photo, or mark it yourself"}
             </p>
+
+            {!batch.received_at && can("manage_batches") && (
+              <button
+                type="button"
+                onClick={markReceived}
+                disabled={actionLoading}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">inventory</span>
+                Mark as received
+              </button>
+            )}
           </div>
 
           <div className="px-6 py-5">

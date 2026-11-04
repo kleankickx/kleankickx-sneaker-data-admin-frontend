@@ -11,6 +11,7 @@ import type { Batch } from "../lib/types";
 import BatchFormModal from "../components/batches/BatchFormModal";
 import { Link } from "react-router-dom";
 import { toast } from "../lib/toast";
+import { DATE_PRESETS, dateRange, inDateRange, type DatePreset } from "../lib/date-ranges";
 
 type SortField =
   | "batch_id"
@@ -34,6 +35,9 @@ export default function BatchesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset>("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const [sortField, setSortField] =
     useState<SortField>("batch_id");
@@ -155,6 +159,7 @@ export default function BatchesPage() {
       const normalizedSearch = search
         .trim()
         .toLowerCase();
+      const createdRange = dateRange(datePreset, dateFrom, dateTo);
 
       const filtered = batches.filter(
         (batch) => {
@@ -180,10 +185,13 @@ export default function BatchesPage() {
             !sourceFilter ||
             batch.source === sourceFilter;
 
+          const matchesDate = inDateRange(batch.created_at, createdRange);
+
           return (
             matchesSearch &&
             matchesStatus &&
-            matchesSource
+            matchesSource &&
+            matchesDate
           );
         },
       );
@@ -253,6 +261,9 @@ export default function BatchesPage() {
       search,
       statusFilter,
       sourceFilter,
+      datePreset,
+      dateFrom,
+      dateTo,
       sortField,
       sortDirection,
     ]);
@@ -290,6 +301,9 @@ export default function BatchesPage() {
     search,
     statusFilter,
     sourceFilter,
+    datePreset,
+    dateFrom,
+    dateTo,
   ]);
 
   function handleSort(field: SortField) {
@@ -311,6 +325,9 @@ export default function BatchesPage() {
     setSearch("");
     setStatusFilter("");
     setSourceFilter("");
+    setDatePreset("");
+    setDateFrom("");
+    setDateTo("");
     setCurrentPage(1);
   }
 
@@ -318,7 +335,8 @@ export default function BatchesPage() {
     return Boolean(
       search ||
         statusFilter ||
-        sourceFilter,
+        sourceFilter ||
+        datePreset,
     );
   }
 
@@ -656,6 +674,42 @@ export default function BatchesPage() {
                 </option>
               ))}
             </select>
+
+            {/* Created date */}
+            <select
+              aria-label="Created"
+              value={datePreset}
+              onChange={(event) => setDatePreset(event.target.value as DatePreset)}
+              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+            >
+              {DATE_PRESETS.map((preset) => (
+                <option key={preset.value} value={preset.value}>
+                  {preset.value ? `Created: ${preset.label}` : "Created: any date"}
+                </option>
+              ))}
+            </select>
+
+            {datePreset === "custom" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  aria-label="Created from"
+                  value={dateFrom}
+                  max={dateTo || undefined}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                  className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                />
+                <span className="text-sm text-gray-400">to</span>
+                <input
+                  type="date"
+                  aria-label="Created to"
+                  value={dateTo}
+                  min={dateFrom || undefined}
+                  onChange={(event) => setDateTo(event.target.value)}
+                  className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+                />
+              </div>
+            )}
 
             {/* Clear filters */}
             {hasActiveFilters() && (
