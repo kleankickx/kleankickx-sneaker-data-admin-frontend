@@ -76,3 +76,22 @@ export function inDateRange(value: string | null | undefined, range: DateRange):
   if (Number.isNaN(time)) return false;
   return (!range.start || time >= range.start.getTime()) && (!range.end || time < range.end.getTime());
 }
+
+/* Short label for a filter button: "This month", "Oct 1 – Oct 31, 2026". */
+const shortDate = (value: string, withYear = false) => {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+};
+
+export function dateFilterLabel(preset: DatePreset, from: string, to: string): string | undefined {
+  if (!preset) return undefined;
+  if (preset !== "custom") return DATE_PRESETS.find((p) => p.value === preset)?.label;
+  if (from && to) return `${shortDate(from)} – ${shortDate(to, true)}`;
+  if (from) return `From ${shortDate(from, true)}`;
+  if (to) return `Until ${shortDate(to, true)}`;
+  return undefined;
+}
