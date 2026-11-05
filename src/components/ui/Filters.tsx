@@ -1,6 +1,6 @@
 /* Toolbar filters: a button per filter that opens a small menu.
    Empty filters show as a dashed "+ Status" button; set ones show their value and an × to clear. */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { DATE_PRESETS, dateFilterLabel, type DatePreset } from "../../lib/date-ranges";
 
@@ -84,10 +84,43 @@ function Trigger({
   );
 }
 
+/* The menu is placed against the window (position: fixed), below its button, and slides
+   left when the button is near the right edge, so it never widens the page or gets cut off. */
 function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const anchor = panel?.parentElement;
+    if (!panel || !anchor) return;
+
+    function place() {
+      if (!panel || !anchor) return;
+      const gap = 8;
+      const box = anchor.getBoundingClientRect();
+      const width = panel.offsetWidth;
+      const height = panel.offsetHeight;
+      const left = Math.max(gap, Math.min(box.left, window.innerWidth - width - gap));
+      const below = box.bottom + gap;
+      const fitsBelow = below + height <= window.innerHeight - gap || box.top - gap - height < gap;
+      panel.style.left = `${left}px`;
+      panel.style.top = `${fitsBelow ? below : box.top - gap - height}px`;
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, []);
+
   return (
     <div
-      className={`absolute left-0 top-full z-30 mt-2 rounded-xl border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 ${className}`}
+      ref={panelRef}
+      style={{ left: 0, top: 0 }}
+      className={`fixed z-50 max-w-[calc(100vw-1rem)] rounded-xl border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 ${className}`}
     >
       {children}
     </div>
@@ -224,7 +257,7 @@ export function DateFilter({
       />
 
       {open && (
-        <Panel className="w-[min(34rem,calc(100vw-2rem))] overflow-hidden">
+        <Panel className="w-[34rem] overflow-hidden">
           <div className="grid sm:grid-cols-[11rem_1fr]">
             <ul
               role="menu"
