@@ -11,7 +11,8 @@ import type { Batch } from "../lib/types";
 import BatchFormModal from "../components/batches/BatchFormModal";
 import { Link } from "react-router-dom";
 import { toast } from "../lib/toast";
-import { DATE_PRESETS, dateRange, inDateRange, type DatePreset } from "../lib/date-ranges";
+import { dateRange, inDateRange, type DatePreset } from "../lib/date-ranges";
+import { DateFilter, SelectFilter } from "../components/ui/Filters";
 
 type SortField =
   | "batch_id"
@@ -38,6 +39,21 @@ export default function BatchesPage() {
   const [datePreset, setDatePreset] = useState<DatePreset>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // "/" jumps to search, as in most list pages.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const typing = target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+      if (event.key === "/" && !typing && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const [sortField, setSortField] =
     useState<SortField>("batch_id");
@@ -606,126 +622,87 @@ export default function BatchesPage() {
         )}
 
         {/* Filters */}
-        <div className="mb-5 rounded-xl border border-gray-200 bg-white p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            {/* Search */}
-            <div className="relative min-w-0 flex-1">
-              <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-gray-400">
-                search
-              </span>
-
-              <input
-                type="text"
-                value={search}
-                onChange={(event) =>
-                  setSearch(
-                    event.target.value,
-                  )
-                }
-                placeholder="Search by batch ID, name or source..."
-                className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-3 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-              />
-            </div>
-
-            {/* Status filter */}
-            <select
-              value={statusFilter}
-              onChange={(event) =>
-                setStatusFilter(
-                  event.target.value,
-                )
-              }
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative w-full lg:max-w-sm">
+            <span
+              aria-hidden="true"
+              className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[20px] text-gray-400"
             >
-              <option value="">
-                All statuses
-              </option>
-
-              {statuses.map((status) => (
-                <option
-                  key={status}
-                  value={status}
-                >
-                  {formatStatus(status)}
-                </option>
-              ))}
-            </select>
-
-            {/* Source filter */}
-            <select
-              value={sourceFilter}
-              onChange={(event) =>
-                setSourceFilter(
-                  event.target.value,
-                )
-              }
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-            >
-              <option value="">
-                All sources
-              </option>
-
-              {sources.map((source) => (
-                <option
-                  key={source}
-                  value={source}
-                >
-                  {source}
-                </option>
-              ))}
-            </select>
-
-            {/* Created date */}
-            <select
-              aria-label="Created"
-              value={datePreset}
-              onChange={(event) => setDatePreset(event.target.value as DatePreset)}
-              className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-            >
-              {DATE_PRESETS.map((preset) => (
-                <option key={preset.value} value={preset.value}>
-                  {preset.value ? `Created: ${preset.label}` : "Created: any date"}
-                </option>
-              ))}
-            </select>
-
-            {datePreset === "custom" && (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  aria-label="Created from"
-                  value={dateFrom}
-                  max={dateTo || undefined}
-                  onChange={(event) => setDateFrom(event.target.value)}
-                  className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-                />
-                <span className="text-sm text-gray-400">to</span>
-                <input
-                  type="date"
-                  aria-label="Created to"
-                  value={dateTo}
-                  min={dateFrom || undefined}
-                  onChange={(event) => setDateTo(event.target.value)}
-                  className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 outline-none focus:border-gray-400 focus:ring-2 focus:ring-gray-100"
-                />
-              </div>
+              search
+            </span>
+            <input
+              ref={searchRef}
+              type="search"
+              aria-label="Search batches"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") setSearch("");
+              }}
+              placeholder="Search ID, name or source"
+              className="h-9 w-full rounded-lg border border-gray-200 bg-white pl-10 pr-9 text-sm text-gray-900 shadow-sm outline-none transition placeholder:text-gray-400 focus:border-gray-400 focus:ring-2 focus:ring-gray-100 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  searchRef.current?.focus();
+                }}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+              >
+                <span aria-hidden="true" className="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            ) : (
+              <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-gray-200 bg-gray-50 px-1.5 text-[11px] font-medium text-gray-400 sm:block">
+                /
+              </kbd>
             )}
+          </div>
 
-            {/* Clear filters */}
+          <div className="flex flex-wrap items-center gap-2">
+            <SelectFilter
+              label="Status"
+              value={statusFilter}
+              options={statuses.map((status) => ({ value: status, label: formatStatus(status) }))}
+              onChange={setStatusFilter}
+            />
+            <SelectFilter
+              label="Source"
+              value={sourceFilter}
+              options={sources.map((source) => ({ value: source, label: source }))}
+              onChange={setSourceFilter}
+            />
+            <DateFilter
+              label="Created"
+              preset={datePreset}
+              from={dateFrom}
+              to={dateTo}
+              onChange={(preset, from, to) => {
+                setDatePreset(preset);
+                setDateFrom(from);
+                setDateTo(to);
+              }}
+            />
             {hasActiveFilters() && (
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900"
+                className="h-9 rounded-lg px-2.5 text-sm font-medium text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
               >
-                <span className="material-symbols-outlined text-[18px]">
-                  close
-                </span>
-
-                Clear
+                Clear all
               </button>
             )}
           </div>
+
+          {!loading && (
+            <p className="text-sm text-gray-500 lg:ml-auto" aria-live="polite">
+              {hasActiveFilters()
+                ? `${filteredAndSortedBatches.length} of ${batches.length} batches`
+                : `${batches.length} ${batches.length === 1 ? "batch" : "batches"}`}
+            </p>
+          )}
         </div>
 
         {/* Table */}
