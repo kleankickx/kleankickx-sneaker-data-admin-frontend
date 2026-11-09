@@ -218,6 +218,7 @@ function ConfirmDialog({
   cancelLabel = "Cancel",
   loading,
   error,
+  typeToConfirm,
   onConfirm,
   onCancel,
 }: {
@@ -230,9 +231,17 @@ function ConfirmDialog({
   cancelLabel?: string;
   loading?: boolean;
   error?: string;
+  /** The user must type this exactly before they can confirm. */
+  typeToConfirm?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const [typed, setTyped] = useState("");
+
+  useEffect(() => {
+    if (open) setTyped("");
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -302,6 +311,21 @@ function ConfirmDialog({
             </div>
           </div>
 
+          {typeToConfirm && (
+            <label className="mt-4 block text-sm text-gray-700">
+              Type <span className="font-semibold">{typeToConfirm}</span> to confirm
+              <input
+                type="text"
+                autoFocus
+                autoComplete="off"
+                value={typed}
+                disabled={loading}
+                onChange={(event) => setTyped(event.target.value)}
+                className="mt-1.5 h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100"
+              />
+            </label>
+          )}
+
           {error && (
             <div className="mt-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-3.5">
               <span className="material-symbols-outlined text-[20px] text-red-600">
@@ -327,7 +351,7 @@ function ConfirmDialog({
 
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || (Boolean(typeToConfirm) && typed !== typeToConfirm)}
             onClick={onConfirm}
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 ${toneStyles.confirm}`}
           >
@@ -786,7 +810,8 @@ function BatchCleanupModal({
 export default function BatchDetailsPage() {
   const { batchId } = useParams<{ batchId: string }>();
   const navigate = useNavigate();
-  const { can } = useAuth();
+  const { can, user } = useAuth();
+  const isSuperuser = Boolean(user?.is_superuser);
 
   /* Data state */
   const [details, setDetails] =
@@ -826,6 +851,8 @@ export default function BatchDetailsPage() {
   const [editingPair, setEditingPair] = useState<SneakerPair | null>(null);
   const [deletingPair, setDeletingPair] = useState<SneakerPair | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [forceBatchOpen, setForceBatchOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState("");
   const [confirmAction, setConfirmAction] =
@@ -1433,14 +1460,32 @@ export default function BatchDetailsPage() {
   const pageAllPicked =
     details.pairs.length > 0 && details.pairs.every((pair) => picked.has(pair.id));
 
-  async function handleBulkDelete() {
+  async function handleForceDeleteBatch() {
+    if (!batchId) return;
+
+    try {
+      setActionLoading(true);
+      setConfirmError("");
+
+      await deleteBatch(batchId, true);
+
+      showToast("success", "Batch and all its pairs deleted.");
+      navigate("/batches");
+    } catch (err) {
+      setConfirmError(getErrorMessage(err));
+      setActionLoading(false);
+    }
+  }
+
+  async function handleBulkDelete(force = false) {
     try {
       setBulkDeleting(true);
       setBulkDeleteError("");
 
-      const result = await bulkDeletePairs([...picked]);
+      const result = await bulkDeletePairs([...picked], force);
 
       setBulkDeleteOpen(false);
+      setForceDeleteOpen(false);
       setPicked(new Set());
       await loadBatchDetails();
       showToast(
@@ -1638,6 +1683,23 @@ export default function BatchDetailsPage() {
                   </button>
 
                   <div className="my-1 border-t border-gray-100" />
+
+                  {isSuperuser && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActions(false);
+                        setConfirmError("");
+                        setForceBatchOpen(true);
+                      }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm font-medium text-red-700 hover:bg-red-50"
+                    >
+                      <span className="material-symbols-outlined text-[19px]">
+                        delete_forever
+                      </span>
+                      Force delete batch and pairs
+                    </button>
+                  )}
 
                   <button
                     type="button"
@@ -2093,6 +2155,19 @@ export default function BatchDetailsPage() {
                 >
                   <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete</span>
                   Delete selected
+                </button>
+              )}
+              {isSuperuser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkDeleteError("");
+                    setForceDeleteOpen(true);
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-red-600 px-3 text-sm font-medium text-white hover:bg-red-700"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete_forever</span>
+                  Force delete
                 </button>
               )}
               {can("run_pipeline") && (
@@ -2668,8 +2743,37 @@ export default function BatchDetailsPage() {
         confirmLabel={`Delete ${picked.size} pair${picked.size === 1 ? "" : "s"}`}
         loading={bulkDeleting}
         error={bulkDeleteError}
-        onConfirm={handleBulkDelete}
+        onConfirm={() => handleBulkDelete()}
         onCancel={() => setBulkDeleteOpen(false)}
+      />
+
+      {/* Superuser force deletes */}
+      <ConfirmDialog
+        open={forceDeleteOpen}
+        tone="danger"
+        icon="delete_forever"
+        title={`Force delete ${picked.size} pair${picked.size === 1 ? "" : "s"}?`}
+        description="This bypasses every protection and also deletes pairs KleanKickx orders are waiting on. KleanKickx is not told, so those orders will still list them. It cannot be undone and is recorded in the audit log."
+        confirmLabel="Force delete"
+        loading={bulkDeleting}
+        error={bulkDeleteError}
+        typeToConfirm="DELETE"
+        onConfirm={() => handleBulkDelete(true)}
+        onCancel={() => setForceDeleteOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={forceBatchOpen}
+        tone="danger"
+        icon="delete_forever"
+        title="Force delete this batch and all its pairs?"
+        description={`Batch ${batchLabel} and all ${details.meta.count} of its pairs will be permanently removed with their photos and results, including pairs KleanKickx orders are waiting on. KleanKickx is not told. It cannot be undone and is recorded in the audit log.`}
+        confirmLabel="Force delete batch"
+        loading={actionLoading}
+        error={confirmError}
+        typeToConfirm="DELETE"
+        onConfirm={handleForceDeleteBatch}
+        onCancel={() => setForceBatchOpen(false)}
       />
 
       {/* Open batch confirmation */}
