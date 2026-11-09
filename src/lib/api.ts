@@ -322,8 +322,11 @@ export async function updateBatch(
 
 export async function deleteBatch(
   batchId: string,
+  force = false,
 ): Promise<void> {
-  await api.delete(`/batches/${batchId}/`);
+  await api.delete(`/batches/${batchId}/`, {
+    params: force ? { force: true } : undefined,
+  });
 }
 
 export async function openBatch(
@@ -902,13 +905,18 @@ const BULK_DELETE_LIMIT = 100;
 
 export async function bulkDeletePairs(
   ids: string[],
+  force = false,
 ): Promise<BulkDeletePairsResponse> {
   const total: BulkDeletePairsResponse = { deleted_count: 0, skipped: [] };
 
   for (let start = 0; start < ids.length; start += BULK_DELETE_LIMIT) {
     const response = await api.post<ApiResponse<BulkDeletePairsResponse>>(
       "/sneakers/bulk-delete/",
-      { ids: ids.slice(start, start + BULK_DELETE_LIMIT), confirm: true },
+      {
+        ids: ids.slice(start, start + BULK_DELETE_LIMIT),
+        confirm: true,
+        ...(force ? { force: true } : {}),
+      },
     );
     total.deleted_count += response.data.data.deleted_count;
     total.skipped.push(...response.data.data.skipped);
