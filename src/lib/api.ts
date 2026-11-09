@@ -524,6 +524,8 @@ export interface PairWithoutImages {
 
 export interface PairsWithoutImagesPreview {
   count: number;
+  /** No images either, but kept: their KleanKickx order still wants them. */
+  kept_for_orders: number;
   preview: PairWithoutImages[];
   preview_limit: number;
 }
@@ -888,6 +890,31 @@ export async function deleteSneaker(
   );
 
   return response.data.data;
+}
+
+export interface BulkDeletePairsResponse {
+  deleted_count: number;
+  /** Pair numbers left alone because a KleanKickx order still wants them. */
+  skipped: string[];
+}
+
+const BULK_DELETE_LIMIT = 100;
+
+export async function bulkDeletePairs(
+  ids: string[],
+): Promise<BulkDeletePairsResponse> {
+  const total: BulkDeletePairsResponse = { deleted_count: 0, skipped: [] };
+
+  for (let start = 0; start < ids.length; start += BULK_DELETE_LIMIT) {
+    const response = await api.post<ApiResponse<BulkDeletePairsResponse>>(
+      "/sneakers/bulk-delete/",
+      { ids: ids.slice(start, start + BULK_DELETE_LIMIT), confirm: true },
+    );
+    total.deleted_count += response.data.data.deleted_count;
+    total.skipped.push(...response.data.data.skipped);
+  }
+
+  return total;
 }
 
 /* ============================================================

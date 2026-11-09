@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 
 import {
+  bulkDeletePairs,
   closeBatch,
   deleteBatch,
   getBatchCleanupJob,
@@ -639,8 +640,9 @@ function BatchCleanupModal({
               </h3>
 
               <p className="mt-1 max-w-sm text-sm text-gray-500">
-                Every pair in this batch has at least one uploaded
-                image.
+                {preview.kept_for_orders > 0
+                  ? `${preview.kept_for_orders.toLocaleString()} without images ${preview.kept_for_orders === 1 ? "is" : "are"} waiting on KleanKickx orders, so ${preview.kept_for_orders === 1 ? "it stays" : "they stay"}. Cancel in KleanKickx to remove ${preview.kept_for_orders === 1 ? "it" : "them"}.`
+                  : "Every pair in this batch has at least one uploaded image."}
               </p>
             </div>
           )}
@@ -658,6 +660,14 @@ function BatchCleanupModal({
                     {preview.count === 1 ? "" : "s"} in this
                     batch will be deleted
                   </p>
+
+                  {preview.kept_for_orders > 0 && (
+                    <p className="mt-0.5 text-xs text-amber-700">
+                      {preview.kept_for_orders.toLocaleString()} more
+                      without images will stay because KleanKickx
+                      orders are waiting on them.
+                    </p>
+                  )}
 
                   <p className="mt-0.5 text-xs text-amber-700">
                     This action cannot be undone. Related
@@ -815,6 +825,9 @@ export default function BatchDetailsPage() {
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [editingPair, setEditingPair] = useState<SneakerPair | null>(null);
   const [deletingPair, setDeletingPair] = useState<SneakerPair | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState("");
   const [confirmAction, setConfirmAction] =
     useState<ConfirmAction>(null);
   const [confirmError, setConfirmError] = useState("");
@@ -1416,9 +1429,34 @@ export default function BatchDetailsPage() {
 
   const { batch } = details;
   const batchLabel = batch.batch_id ?? batch.id;
-  const canPick = can("run_pipeline");
+  const canPick = can("run_pipeline") || can("edit_pairs");
   const pageAllPicked =
     details.pairs.length > 0 && details.pairs.every((pair) => picked.has(pair.id));
+
+  async function handleBulkDelete() {
+    try {
+      setBulkDeleting(true);
+      setBulkDeleteError("");
+
+      const result = await bulkDeletePairs([...picked]);
+
+      setBulkDeleteOpen(false);
+      setPicked(new Set());
+      await loadBatchDetails();
+      showToast(
+        "success",
+        `Deleted ${result.deleted_count} pair${result.deleted_count === 1 ? "" : "s"}.` +
+          (result.skipped.length
+            ? ` Kept ${result.skipped.length} waiting on KleanKickx orders.`
+            : ""),
+      );
+    } catch (err) {
+      setBulkDeleteError(getErrorMessage(err));
+      await loadBatchDetails();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
 
   function togglePicked(id: string) {
     setPicked((current) => {
@@ -2044,17 +2082,32 @@ export default function BatchDetailsPage() {
               >
                 Clear
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setBulkPairs([...picked]);
-                  setShowBulkRun(true);
-                }}
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800"
-              >
-                <span aria-hidden="true" className="material-symbols-outlined text-[18px]">model_training</span>
-                Run pipeline on selected
-              </button>
+              {can("edit_pairs") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkDeleteError("");
+                    setBulkDeleteOpen(true);
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-red-200 bg-white px-3 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">delete</span>
+                  Delete selected
+                </button>
+              )}
+              {can("run_pipeline") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkPairs([...picked]);
+                    setShowBulkRun(true);
+                  }}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-gray-900 px-3 text-sm font-medium text-white hover:bg-gray-800"
+                >
+                  <span aria-hidden="true" className="material-symbols-outlined text-[18px]">model_training</span>
+                  Run pipeline on selected
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -2603,6 +2656,20 @@ export default function BatchDetailsPage() {
             "Pair created and images uploaded.",
           );
         }}
+      />
+
+      {/* Bulk delete confirmation */}
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        tone="danger"
+        icon="delete"
+        title={`Delete ${picked.size} pair${picked.size === 1 ? "" : "s"}?`}
+        description="This permanently removes the selected pairs with their photos, identifications and pipeline runs, including any that are verified. It cannot be undone. Pairs waiting on KleanKickx orders are kept."
+        confirmLabel={`Delete ${picked.size} pair${picked.size === 1 ? "" : "s"}`}
+        loading={bulkDeleting}
+        error={bulkDeleteError}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkDeleteOpen(false)}
       />
 
       {/* Open batch confirmation */}
